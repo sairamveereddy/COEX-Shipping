@@ -12,6 +12,7 @@ import {
   FileDoneOutlined,
   GlobalOutlined,
   InboxOutlined,
+  LinkOutlined,
   LoginOutlined,
   MailOutlined,
   MinusOutlined,
@@ -29,11 +30,10 @@ import {
 } from '@ant-design/icons';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -53,6 +53,7 @@ import {
   Row,
   Segmented,
   Select,
+  Slider,
   Space,
   Statistic,
   Steps,
@@ -76,17 +77,23 @@ type ItemKey =
   | 'envelope';
 type SpeedKey = 'standard' | 'nextDay' | 'sameDay';
 type CustomerType = 'individual' | 'business';
+type CarrierKey = 'best' | 'ups' | 'fedex';
+type CarrierProvider = 'ups' | 'fedex';
+type TrackingCarrier = CarrierProvider | 'auto';
 
 type QuoteState = {
   counts: Record<ItemKey, number>;
-  origin: string;
-  destination: string;
+  originState: string;
+  destinationState: string;
   pickupDate: string;
   pickupWindow: string;
   speed: SpeedKey;
   protection: boolean;
   pickup: boolean;
+  residential: boolean;
+  declaredValue: number;
   customerType: CustomerType;
+  carrier: CarrierKey;
 };
 
 type BookingState = {
@@ -104,8 +111,71 @@ type BookingState = {
   notes: string;
 };
 
+type USLocation = {
+  code: string;
+  name: string;
+  city: string;
+  zip: string;
+  lat: number;
+  lng: number;
+  region: string;
+  remote?: boolean;
+};
+
+type ItemDefinition = {
+  label: string;
+  sublabel: string;
+  max: string;
+  weight: number;
+  length: number;
+  width: number;
+  height: number;
+  icon: ReactNode;
+  oversize?: boolean;
+};
+
+type CarrierRate = {
+  key: CarrierProvider;
+  name: string;
+  service: string;
+  total: number;
+  base: number;
+  transportation: number;
+  fuel: number;
+  accessorials: number;
+  protection: number;
+  discount: number;
+  transit: string;
+  deliveryDate: string;
+  trackingUrl: string;
+};
+
+type QuoteMetrics = {
+  packages: number;
+  actualWeight: number;
+  billableWeight: number;
+  dimWeight: number;
+  distanceMiles: number;
+  zone: number;
+  origin: USLocation;
+  destination: USLocation;
+  routeLabel: string;
+  selectedCarrier: CarrierProvider;
+  total: number;
+  savings: number;
+  eta: string;
+  service: string;
+  protectionFee: number;
+  pickupFee: number;
+  residentialFee: number;
+  remoteFee: number;
+  rates: Record<CarrierProvider, CarrierRate>;
+  availabilityNote: string;
+};
+
 type Shipment = {
   number: string;
+  carrier: TrackingCarrier;
   status: string;
   progress: number;
   origin: string;
@@ -115,6 +185,11 @@ type Shipment = {
   pieces: string;
   documents: string[];
   exception?: string;
+  trackingLinks: Array<{
+    carrier: CarrierProvider;
+    label: string;
+    url: string;
+  }>;
   milestones: Array<{
     title: string;
     detail: string;
@@ -145,6 +220,474 @@ declare global {
   }
 }
 
+const usLocations: USLocation[] = [
+  {
+    code: 'AL',
+    name: 'Alabama',
+    city: 'Birmingham',
+    zip: '35203',
+    lat: 33.5186,
+    lng: -86.8104,
+    region: 'Southeast',
+  },
+  {
+    code: 'AK',
+    name: 'Alaska',
+    city: 'Anchorage',
+    zip: '99501',
+    lat: 61.2176,
+    lng: -149.8997,
+    region: 'Non-contiguous',
+    remote: true,
+  },
+  {
+    code: 'AZ',
+    name: 'Arizona',
+    city: 'Phoenix',
+    zip: '85004',
+    lat: 33.4484,
+    lng: -112.074,
+    region: 'Southwest',
+  },
+  {
+    code: 'AR',
+    name: 'Arkansas',
+    city: 'Little Rock',
+    zip: '72201',
+    lat: 34.7465,
+    lng: -92.2896,
+    region: 'South',
+  },
+  {
+    code: 'CA',
+    name: 'California',
+    city: 'Los Angeles',
+    zip: '90045',
+    lat: 33.9416,
+    lng: -118.4085,
+    region: 'West',
+  },
+  {
+    code: 'CO',
+    name: 'Colorado',
+    city: 'Denver',
+    zip: '80202',
+    lat: 39.7392,
+    lng: -104.9903,
+    region: 'Mountain',
+  },
+  {
+    code: 'CT',
+    name: 'Connecticut',
+    city: 'Hartford',
+    zip: '06103',
+    lat: 41.7658,
+    lng: -72.6734,
+    region: 'Northeast',
+  },
+  {
+    code: 'DE',
+    name: 'Delaware',
+    city: 'Wilmington',
+    zip: '19801',
+    lat: 39.7391,
+    lng: -75.5398,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'DC',
+    name: 'District of Columbia',
+    city: 'Washington',
+    zip: '20001',
+    lat: 38.9072,
+    lng: -77.0369,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'FL',
+    name: 'Florida',
+    city: 'Miami',
+    zip: '33131',
+    lat: 25.7617,
+    lng: -80.1918,
+    region: 'Southeast',
+  },
+  {
+    code: 'GA',
+    name: 'Georgia',
+    city: 'Atlanta',
+    zip: '30303',
+    lat: 33.749,
+    lng: -84.388,
+    region: 'Southeast',
+  },
+  {
+    code: 'HI',
+    name: 'Hawaii',
+    city: 'Honolulu',
+    zip: '96813',
+    lat: 21.3069,
+    lng: -157.8583,
+    region: 'Non-contiguous',
+    remote: true,
+  },
+  {
+    code: 'ID',
+    name: 'Idaho',
+    city: 'Boise',
+    zip: '83702',
+    lat: 43.615,
+    lng: -116.2023,
+    region: 'Mountain',
+  },
+  {
+    code: 'IL',
+    name: 'Illinois',
+    city: 'Chicago',
+    zip: '60601',
+    lat: 41.8781,
+    lng: -87.6298,
+    region: 'Midwest',
+  },
+  {
+    code: 'IN',
+    name: 'Indiana',
+    city: 'Indianapolis',
+    zip: '46204',
+    lat: 39.7684,
+    lng: -86.1581,
+    region: 'Midwest',
+  },
+  {
+    code: 'IA',
+    name: 'Iowa',
+    city: 'Des Moines',
+    zip: '50309',
+    lat: 41.5868,
+    lng: -93.625,
+    region: 'Midwest',
+  },
+  {
+    code: 'KS',
+    name: 'Kansas',
+    city: 'Wichita',
+    zip: '67202',
+    lat: 37.6872,
+    lng: -97.3301,
+    region: 'Midwest',
+  },
+  {
+    code: 'KY',
+    name: 'Kentucky',
+    city: 'Louisville',
+    zip: '40202',
+    lat: 38.2527,
+    lng: -85.7585,
+    region: 'South',
+  },
+  {
+    code: 'LA',
+    name: 'Louisiana',
+    city: 'New Orleans',
+    zip: '70112',
+    lat: 29.9511,
+    lng: -90.0715,
+    region: 'South',
+  },
+  {
+    code: 'ME',
+    name: 'Maine',
+    city: 'Portland',
+    zip: '04101',
+    lat: 43.6591,
+    lng: -70.2568,
+    region: 'Northeast',
+  },
+  {
+    code: 'MD',
+    name: 'Maryland',
+    city: 'Baltimore',
+    zip: '21202',
+    lat: 39.2904,
+    lng: -76.6122,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'MA',
+    name: 'Massachusetts',
+    city: 'Boston',
+    zip: '02108',
+    lat: 42.3601,
+    lng: -71.0589,
+    region: 'Northeast',
+  },
+  {
+    code: 'MI',
+    name: 'Michigan',
+    city: 'Detroit',
+    zip: '48226',
+    lat: 42.3314,
+    lng: -83.0458,
+    region: 'Midwest',
+  },
+  {
+    code: 'MN',
+    name: 'Minnesota',
+    city: 'Minneapolis',
+    zip: '55401',
+    lat: 44.9778,
+    lng: -93.265,
+    region: 'Midwest',
+  },
+  {
+    code: 'MS',
+    name: 'Mississippi',
+    city: 'Jackson',
+    zip: '39201',
+    lat: 32.2988,
+    lng: -90.1848,
+    region: 'South',
+  },
+  {
+    code: 'MO',
+    name: 'Missouri',
+    city: 'Kansas City',
+    zip: '64106',
+    lat: 39.0997,
+    lng: -94.5786,
+    region: 'Midwest',
+  },
+  {
+    code: 'MT',
+    name: 'Montana',
+    city: 'Billings',
+    zip: '59101',
+    lat: 45.7833,
+    lng: -108.5007,
+    region: 'Mountain',
+  },
+  {
+    code: 'NE',
+    name: 'Nebraska',
+    city: 'Omaha',
+    zip: '68102',
+    lat: 41.2565,
+    lng: -95.9345,
+    region: 'Midwest',
+  },
+  {
+    code: 'NV',
+    name: 'Nevada',
+    city: 'Las Vegas',
+    zip: '89101',
+    lat: 36.1699,
+    lng: -115.1398,
+    region: 'West',
+  },
+  {
+    code: 'NH',
+    name: 'New Hampshire',
+    city: 'Manchester',
+    zip: '03101',
+    lat: 42.9956,
+    lng: -71.4548,
+    region: 'Northeast',
+  },
+  {
+    code: 'NJ',
+    name: 'New Jersey',
+    city: 'Newark',
+    zip: '07102',
+    lat: 40.7357,
+    lng: -74.1724,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'NM',
+    name: 'New Mexico',
+    city: 'Albuquerque',
+    zip: '87102',
+    lat: 35.0844,
+    lng: -106.6504,
+    region: 'Southwest',
+  },
+  {
+    code: 'NY',
+    name: 'New York',
+    city: 'New York',
+    zip: '10001',
+    lat: 40.7128,
+    lng: -74.006,
+    region: 'Northeast',
+  },
+  {
+    code: 'NC',
+    name: 'North Carolina',
+    city: 'Charlotte',
+    zip: '28202',
+    lat: 35.2271,
+    lng: -80.8431,
+    region: 'Southeast',
+  },
+  {
+    code: 'ND',
+    name: 'North Dakota',
+    city: 'Fargo',
+    zip: '58102',
+    lat: 46.8772,
+    lng: -96.7898,
+    region: 'Midwest',
+  },
+  {
+    code: 'OH',
+    name: 'Ohio',
+    city: 'Columbus',
+    zip: '43215',
+    lat: 39.9612,
+    lng: -82.9988,
+    region: 'Midwest',
+  },
+  {
+    code: 'OK',
+    name: 'Oklahoma',
+    city: 'Oklahoma City',
+    zip: '73102',
+    lat: 35.4676,
+    lng: -97.5164,
+    region: 'South',
+  },
+  {
+    code: 'OR',
+    name: 'Oregon',
+    city: 'Portland',
+    zip: '97204',
+    lat: 45.5152,
+    lng: -122.6784,
+    region: 'West',
+  },
+  {
+    code: 'PA',
+    name: 'Pennsylvania',
+    city: 'Philadelphia',
+    zip: '19103',
+    lat: 39.9526,
+    lng: -75.1652,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'RI',
+    name: 'Rhode Island',
+    city: 'Providence',
+    zip: '02903',
+    lat: 41.824,
+    lng: -71.4128,
+    region: 'Northeast',
+  },
+  {
+    code: 'SC',
+    name: 'South Carolina',
+    city: 'Charleston',
+    zip: '29401',
+    lat: 32.7765,
+    lng: -79.9311,
+    region: 'Southeast',
+  },
+  {
+    code: 'SD',
+    name: 'South Dakota',
+    city: 'Sioux Falls',
+    zip: '57104',
+    lat: 43.5446,
+    lng: -96.7311,
+    region: 'Midwest',
+  },
+  {
+    code: 'TN',
+    name: 'Tennessee',
+    city: 'Nashville',
+    zip: '37219',
+    lat: 36.1627,
+    lng: -86.7816,
+    region: 'South',
+  },
+  {
+    code: 'TX',
+    name: 'Texas',
+    city: 'Dallas',
+    zip: '75201',
+    lat: 32.7767,
+    lng: -96.797,
+    region: 'South',
+  },
+  {
+    code: 'UT',
+    name: 'Utah',
+    city: 'Salt Lake City',
+    zip: '84101',
+    lat: 40.7608,
+    lng: -111.891,
+    region: 'Mountain',
+  },
+  {
+    code: 'VT',
+    name: 'Vermont',
+    city: 'Burlington',
+    zip: '05401',
+    lat: 44.4759,
+    lng: -73.2121,
+    region: 'Northeast',
+  },
+  {
+    code: 'VA',
+    name: 'Virginia',
+    city: 'Richmond',
+    zip: '23219',
+    lat: 37.5407,
+    lng: -77.436,
+    region: 'Mid-Atlantic',
+  },
+  {
+    code: 'WA',
+    name: 'Washington',
+    city: 'Seattle',
+    zip: '98101',
+    lat: 47.6062,
+    lng: -122.3321,
+    region: 'West',
+  },
+  {
+    code: 'WV',
+    name: 'West Virginia',
+    city: 'Charleston',
+    zip: '25301',
+    lat: 38.3498,
+    lng: -81.6326,
+    region: 'South',
+  },
+  {
+    code: 'WI',
+    name: 'Wisconsin',
+    city: 'Milwaukee',
+    zip: '53202',
+    lat: 43.0389,
+    lng: -87.9065,
+    region: 'Midwest',
+  },
+  {
+    code: 'WY',
+    name: 'Wyoming',
+    city: 'Cheyenne',
+    zip: '82001',
+    lat: 41.14,
+    lng: -104.8202,
+    region: 'Mountain',
+  },
+];
+
+const locationByCode = Object.fromEntries(
+  usLocations.map((location) => [location.code, location]),
+) as Record<string, USLocation>;
+
 const emptyCounts: Record<ItemKey, number> = {
   carryOn: 0,
   checked: 1,
@@ -157,14 +700,17 @@ const emptyCounts: Record<ItemKey, number> = {
 
 const initialQuote: QuoteState = {
   counts: emptyCounts,
-  origin: 'Shanghai, CN',
-  destination: 'Los Angeles, US',
+  originState: 'TX',
+  destinationState: 'CA',
   pickupDate: '2026-09-09',
   pickupWindow: '10:00 AM - 12:00 PM',
   speed: 'standard',
   protection: true,
-  pickup: false,
+  pickup: true,
+  residential: true,
+  declaredValue: 500,
   customerType: 'business',
+  carrier: 'best',
 };
 
 const initialBooking: BookingState = {
@@ -192,225 +738,385 @@ const itemOrder: ItemKey[] = [
   'envelope',
 ];
 
-const itemDefinitions: Record<
-  ItemKey,
-  {
-    label: string;
-    sublabel: string;
-    max: string;
-    weight: number;
-    base: number;
-    icon: ReactNode;
-  }
-> = {
+const itemDefinitions: Record<ItemKey, ItemDefinition> = {
   carryOn: {
     label: 'Carry-on',
     sublabel: 'Compact luggage',
-    max: 'Up to 25 lb / 49 in',
+    max: '25 lb / 22 x 14 x 9 in',
     weight: 25,
-    base: 23,
+    length: 22,
+    width: 14,
+    height: 9,
     icon: <InboxOutlined />,
   },
   checked: {
-    label: 'Checked',
+    label: 'Checked bag',
     sublabel: 'Standard suitcase',
-    max: 'Up to 50 lb / 62 in',
+    max: '50 lb / 27 x 18 x 12 in',
     weight: 50,
-    base: 39,
+    length: 27,
+    width: 18,
+    height: 12,
     icon: <InboxOutlined />,
   },
   oversize: {
-    label: 'Oversize',
+    label: 'Oversize bag',
     sublabel: 'Large luggage',
-    max: 'Up to 75 lb / 71 in',
+    max: '75 lb / 32 x 20 x 14 in',
     weight: 75,
-    base: 64,
+    length: 32,
+    width: 20,
+    height: 14,
     icon: <ShoppingOutlined />,
+    oversize: true,
   },
   box: {
     label: 'Box',
     sublabel: 'Cartons and cases',
-    max: 'Up to 50 lb / 62 in',
+    max: '50 lb / 24 x 18 x 18 in',
     weight: 50,
-    base: 36,
+    length: 24,
+    width: 18,
+    height: 18,
     icon: <ShopOutlined />,
   },
   golf: {
-    label: 'Golf',
-    sublabel: 'Golf bags and clubs',
-    max: 'Up to 50 lb / 75 in',
+    label: 'Golf clubs',
+    sublabel: 'Travel bag and clubs',
+    max: '50 lb / 48 x 14 x 12 in',
     weight: 50,
-    base: 52,
+    length: 48,
+    width: 14,
+    height: 12,
     icon: <CompassOutlined />,
+    oversize: true,
   },
   ski: {
-    label: 'Ski / Snowboard',
-    sublabel: 'Skis, boards, and boot bags',
-    max: 'Up to 50 lb / 75 in',
+    label: 'Ski / snowboard',
+    sublabel: 'Skis, board, boots',
+    max: '50 lb / 70 x 12 x 8 in',
     weight: 50,
-    base: 58,
+    length: 70,
+    width: 12,
+    height: 8,
     icon: <CloudServerOutlined />,
+    oversize: true,
   },
   envelope: {
     label: 'Envelope',
     sublabel: 'Documents and flat items',
-    max: 'Up to 2 lb',
+    max: '2 lb / 12 x 9 x 1 in',
     weight: 2,
-    base: 14,
+    length: 12,
+    width: 9,
+    height: 1,
     icon: <FileDoneOutlined />,
   },
 };
 
 const speedDefinitions: Record<
   SpeedKey,
-  { label: string; detail: string; multiplier: number; eta: string }
+  { label: string; detail: string; multiplier: number; transitByZone: string[] }
 > = {
   standard: {
-    label: 'Standard',
-    detail: 'Next available working day',
+    label: 'Ground',
+    detail: 'Best value domestic service',
     multiplier: 1,
-    eta: '3-5 business days',
+    transitByZone: [
+      '',
+      '',
+      '1-2 business days',
+      '2 business days',
+      '2-3 business days',
+      '3 business days',
+      '3-4 business days',
+      '4-5 business days',
+      '5-7 business days',
+    ],
   },
   nextDay: {
     label: 'Next day',
-    detail: 'Guaranteed next working day',
-    multiplier: 1.45,
-    eta: 'next working day',
+    detail: 'Priority air estimate',
+    multiplier: 2.28,
+    transitByZone: [
+      '',
+      '',
+      'next business day',
+      'next business day',
+      'next business day',
+      'next business day',
+      'next business day',
+      '1-2 business days',
+      '2 business days',
+    ],
   },
   sameDay: {
     label: 'Same day',
-    detail: 'Before the 3:00 PM cutoff',
-    multiplier: 1.92,
-    eta: 'same day',
+    detail: 'Metro courier estimate',
+    multiplier: 3.75,
+    transitByZone: [
+      '',
+      '',
+      'same day',
+      'same day by courier',
+      'same day by courier',
+      'not generally available',
+      'not generally available',
+      'not generally available',
+      'not generally available',
+    ],
   },
 };
 
-const coexMetrics = [
-  ['50+', 'Countries'],
-  ['10K+', 'Shipments'],
-  ['99%', 'On-Time Performance'],
-  ['24/7', 'Visibility'],
+const carrierProfiles: Record<
+  CarrierProvider,
+  {
+    name: string;
+    base: number;
+    perLbByZone: Record<number, number>;
+    fuelPct: number;
+    pickupFee: number;
+    residentialFee: number;
+    additionalHandling: number;
+    remotePct: number;
+    serviceNames: Record<SpeedKey, string>;
+    trackingUrl: (trackingNumber: string) => string;
+  }
+> = {
+  ups: {
+    name: 'UPS',
+    base: 11.75,
+    perLbByZone: {
+      2: 0.24,
+      3: 0.29,
+      4: 0.36,
+      5: 0.44,
+      6: 0.52,
+      7: 0.63,
+      8: 0.76,
+    },
+    fuelPct: 0.164,
+    pickupFee: 10.5,
+    residentialFee: 5.95,
+    additionalHandling: 18.75,
+    remotePct: 0.48,
+    serviceNames: {
+      standard: 'UPS Ground estimate',
+      nextDay: 'UPS Next Day Air estimate',
+      sameDay: 'UPS Express Critical style estimate',
+    },
+    trackingUrl: (trackingNumber) =>
+      `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(trackingNumber)}`,
+  },
+  fedex: {
+    name: 'FedEx',
+    base: 12.35,
+    perLbByZone: {
+      2: 0.23,
+      3: 0.3,
+      4: 0.35,
+      5: 0.43,
+      6: 0.51,
+      7: 0.61,
+      8: 0.73,
+    },
+    fuelPct: 0.158,
+    pickupFee: 10,
+    residentialFee: 5.7,
+    additionalHandling: 19.25,
+    remotePct: 0.45,
+    serviceNames: {
+      standard: 'FedEx Ground estimate',
+      nextDay: 'FedEx Priority Overnight estimate',
+      sameDay: 'FedEx SameDay style estimate',
+    },
+    trackingUrl: (trackingNumber) =>
+      `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`,
+  },
+};
+
+const coverageMetrics = [
+  ['50 states + DC', 'USA-only coverage'],
+  ['UPS + FedEx', 'tracking handoff'],
+  ['Zone 2-8', 'domestic pricing logic'],
+  ['DIM / 139', 'billable weight model'],
 ];
 
 const coexServices = [
   {
-    title: 'Ocean Freight',
-    text: 'FCL and LCL sea freight on vetted carrier space, with lane planning and port coordination.',
-    icon: <GlobalOutlined />,
-  },
-  {
-    title: 'Air Freight',
-    text: 'Scheduled and priority uplift for time-critical, high-value or perishable cargo.',
-    icon: <SendOutlined />,
+    title: 'Domestic Parcel',
+    text: 'Suitcases, boxes, golf clubs, skis, envelopes, and everyday shipments priced by state lane, zone, and billable weight.',
+    icon: <InboxOutlined />,
   },
   {
     title: 'Road Transportation',
-    text: 'Inland drayage, line-haul and final-mile delivery managed end to end.',
+    text: 'USA-only road and final-mile movement with pickup windows, residential delivery, and proof-of-delivery readiness.',
     icon: <TruckOutlined />,
   },
   {
+    title: 'Air Priority',
+    text: 'Next-day and same-day style estimates for urgent lanes, with availability notes on long-distance or remote moves.',
+    icon: <SendOutlined />,
+  },
+  {
     title: 'Warehousing & Distribution',
-    text: 'Secure storage, inventory accuracy and order fulfilment close to your customers.',
+    text: 'A COEX operating model for storage, order flow, and inventory support near the customer.',
     icon: <BankOutlined />,
   },
   {
-    title: 'Customs & Documentation',
-    text: 'Customs clearance, tariff classification and complete compliant paperwork.',
+    title: 'Documents & Labels',
+    text: 'Digital labels, carrier receipts, protection certificates, commercial paperwork, and handoff records kept together.',
     icon: <FileDoneOutlined />,
   },
   {
-    title: 'End-to-End Logistics',
-    text: 'One accountable team managing every leg from origin pickup to final delivery.',
+    title: 'End-to-End Visibility',
+    text: 'Quote, booking, carrier handoff, milestone tracking, and exception status inside one Ant Design experience.',
     icon: <ClusterOutlined />,
   },
 ];
 
 const coexSolutions = [
   {
-    title: 'Retail & E-commerce',
-    text: 'Peak-season capacity with flexible ocean-air blends and forward stock positions.',
+    title: 'Travel & Students',
+    text: 'Doorstep suitcase and box shipping between homes, campuses, hotels, and airports across the United States.',
     icon: <ShoppingOutlined />,
   },
   {
+    title: 'Retail & E-commerce',
+    text: 'Multi-state parcel flows with carrier comparison and ready-to-configure live rate APIs.',
+    icon: <ShopOutlined />,
+  },
+  {
     title: 'Manufacturing',
-    text: 'Inbound component flows sequenced to production schedules.',
+    text: 'Inbound component and sample shipments sequenced to operating schedules.',
     icon: <CloudServerOutlined />,
   },
   {
-    title: 'Healthcare & Life Sciences',
-    text: 'Temperature discipline, chain of custody and priority uplift.',
+    title: 'Healthcare & High Value',
+    text: 'Priority handling cues, protection values, and tracking links for high-attention shipments.',
     icon: <SafetyCertificateOutlined />,
-  },
-  {
-    title: 'Energy & Project Cargo',
-    text: 'Out-of-gauge and breakbulk moves engineered lane by lane.',
-    icon: <ThunderboltOutlined />,
   },
 ];
 
 const processSteps = [
-  ['01', 'Request a Quote', 'Share the cargo, the lane and the deadline.'],
-  ['02', 'Plan', 'We build the routing, mode mix and documentation plan.'],
-  ['03', 'Ship', 'Cargo moves through our carrier and partner network.'],
-  ['04', 'Track & Deliver', 'Milestones, exceptions and proof of delivery.'],
+  [
+    '01',
+    'Select US lane',
+    'Choose origin and destination from every state plus Washington, DC.',
+  ],
+  [
+    '02',
+    'Price the shipment',
+    'The calculator applies zone, mileage, DIM weight, carrier, surcharges, and protection.',
+  ],
+  [
+    '03',
+    'Book pickup',
+    'Capture address, contact, pickup window, delivery notes, and cargo details.',
+  ],
+  [
+    '04',
+    'Track delivery',
+    'Use COEX demo tracking or hand off real numbers to UPS and FedEx.',
+  ],
+];
+
+const integrationCards = [
+  {
+    title: 'UPS Rating API',
+    text: 'Credential-ready rate comparison path for account or list rates.',
+    icon: <DollarCircleOutlined />,
+  },
+  {
+    title: 'UPS Tracking API',
+    text: 'OAuth-ready tracking path plus public UPS tracking link handoff.',
+    icon: <SearchOutlined />,
+  },
+  {
+    title: 'FedEx Rates API',
+    text: 'Credential-ready Rates and Transit Times path for service availability.',
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    title: 'FedEx Tracking',
+    text: 'Public FedEx tracking handoff with number detection and carrier actions.',
+    icon: <TruckOutlined />,
+  },
+  {
+    title: 'Address Validation',
+    text: 'Prepared for carrier-side address validation before label purchase.',
+    icon: <EnvironmentOutlined />,
+  },
+  {
+    title: 'Documents',
+    text: 'Label, receipt, protection, and shipment milestone document slots.',
+    icon: <FileDoneOutlined />,
+  },
 ];
 
 const sampleShipments: Shipment[] = [
   {
     number: 'COEX-8143-2290',
+    carrier: 'auto',
     status: 'IN TRANSIT',
-    progress: 60,
-    origin: 'Shanghai, CN',
-    destination: 'Los Angeles, US',
-    mode: "Ocean / FCL 40'",
-    eta: '29 Mar',
-    pieces: '1 container',
-    documents: ['Bill of lading', 'Commercial invoice', 'Customs packet'],
-    exception: 'No active exception. Vessel and arrival forecast are current.',
+    progress: 62,
+    origin: 'Dallas, TX',
+    destination: 'Los Angeles, CA',
+    mode: 'Domestic parcel / checked luggage',
+    eta: 'Sep 9',
+    pieces: '2 checked bags',
+    documents: ['Digital label', 'Carrier receipt', 'Protection certificate'],
+    exception:
+      'No active exception. Carrier handoff and delivery forecast are current.',
+    trackingLinks: [
+      {
+        carrier: 'ups',
+        label: 'Open UPS tracking',
+        url: carrierProfiles.ups.trackingUrl('1Z999AA10123456784'),
+      },
+      {
+        carrier: 'fedex',
+        label: 'Open FedEx tracking',
+        url: carrierProfiles.fedex.trackingUrl('123456789012'),
+      },
+    ],
     milestones: [
+      { title: 'Quote reserved', detail: 'Dallas, TX - Sep 2', done: true },
       {
-        title: 'Booking confirmed',
-        detail: 'Shanghai, CN - 12 Mar',
+        title: 'Digital label ready',
+        detail: 'Phone-ready label created',
         done: true,
       },
+      { title: 'Carrier accepted', detail: 'Origin scan complete', done: true },
+      { title: 'In transit', detail: 'Line-haul to California', done: true },
       {
-        title: 'Departed',
-        detail: 'Shanghai Yangshan Terminal - 15 Mar',
-        done: true,
-      },
-      {
-        title: 'In Transit - Pacific Ocean',
-        detail: 'Vessel COEX HORIZON - Voy. 118E',
-        done: true,
-      },
-      {
-        title: 'Arrival Los Angeles',
-        detail: 'Estimated 29 Mar',
+        title: 'Out for delivery',
+        detail: 'Pending destination station scan',
         done: false,
       },
-      {
-        title: 'Customs cleared & delivered',
-        detail: 'Pending',
-        done: false,
-      },
+      { title: 'Delivered', detail: 'Pending proof of delivery', done: false },
     ],
   },
   {
     number: 'LLX-8143-2290',
+    carrier: 'ups',
     status: 'LABEL READY',
     progress: 34,
     origin: 'Austin, TX',
     destination: 'Los Angeles, CA',
-    mode: 'Parcel / checked luggage',
+    mode: 'UPS Ground estimate / checked luggage',
     eta: 'Sep 9',
     pieces: '2 checked bags',
     documents: ['Digital label', 'Carrier receipt', 'Protection certificate'],
-    milestones: [
+    trackingLinks: [
       {
-        title: 'Quote reserved',
-        detail: 'Austin, TX - Sep 2',
-        done: true,
+        carrier: 'ups',
+        label: 'Open UPS tracking',
+        url: carrierProfiles.ups.trackingUrl('1Z999AA10123456784'),
       },
+    ],
+    milestones: [
+      { title: 'Quote reserved', detail: 'Austin, TX - Sep 2', done: true },
       {
         title: 'Digital label ready',
         detail: 'Phone-ready label created',
@@ -421,50 +1127,36 @@ const sampleShipments: Shipment[] = [
         detail: 'Pending pickup or drop-off scan',
         done: false,
       },
-      {
-        title: 'In transit',
-        detail: 'Pending',
-        done: false,
-      },
-      {
-        title: 'Delivered',
-        detail: 'Pending',
-        done: false,
-      },
+      { title: 'In transit', detail: 'Pending', done: false },
+      { title: 'Delivered', detail: 'Pending', done: false },
     ],
   },
 ];
 
 const faqItems = [
   {
-    key: 'work',
-    label: 'How does COEX Shipping work?',
+    key: 'pricing',
+    label: 'How is the domestic estimate calculated?',
     children:
-      'Choose the shipment type, share the lane and deadline, receive a benchmark quote, then book pickup, documents, tracking, and delivery milestones from one operating surface.',
+      'The calculator uses origin and destination state coordinates, domestic zones 2 through 8, actual weight, dimensional weight using a 139 divisor, selected service speed, residential delivery, pickup, additional handling, remote state logic, declared value protection, and carrier profile comparison.',
   },
   {
-    key: 'services',
-    label: 'Which services are supported?',
+    key: 'live-rates',
+    label: 'Are these exact UPS and FedEx account rates?',
     children:
-      'The site supports ocean freight, air freight, road transportation, warehousing and distribution, customs and documentation, end-to-end logistics, luggage, boxes, envelopes, golf clubs, skis, and snowboards.',
+      'The visible calculator is a transparent estimate. Exact live rates require the site owner to connect UPS and FedEx account credentials server-side so the official carrier APIs can return account-specific or list rates.',
+  },
+  {
+    key: 'coverage',
+    label: 'Where does the service operate?',
+    children:
+      'This redesign is USA-only. The location selector includes all 50 states and Washington, DC, with Alaska and Hawaii treated as non-contiguous remote lanes.',
   },
   {
     key: 'tracking',
-    label: 'Can users track every milestone?',
+    label: 'Can users track UPS and FedEx packages?',
     children:
-      'Yes. The reference tracking flow shows booking confirmation, terminal departure, in-transit vessel details, estimated arrival, customs, and final delivery status.',
-  },
-  {
-    key: 'docs',
-    label: 'Are documents included?',
-    children:
-      'Bills of lading, invoices, customs documents, digital labels, receipts, and protection certificates are kept with the shipment record in the demo UI.',
-  },
-  {
-    key: 'alerts',
-    label: 'What happens when a shipment slips?',
-    children:
-      'The product surfaces exception alerts when a departure, transfer, clearance, or delivery milestone slips, then keeps the revised ETA visible.',
+      'Yes. The tracker detects UPS-style and FedEx-style numbers, creates direct carrier tracking links, and keeps demo COEX tracking for staged shipments.',
   },
   {
     key: 'contact',
@@ -474,39 +1166,225 @@ const faqItems = [
   },
 ];
 
-function getQuoteMetrics(quote: QuoteState) {
-  const packages = itemOrder.reduce((sum, key) => sum + quote.counts[key], 0);
-  const billableWeight = itemOrder.reduce(
-    (sum, key) => sum + quote.counts[key] * itemDefinitions[key].weight,
-    0,
+function radians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function getDistanceMiles(origin: USLocation, destination: USLocation) {
+  if (origin.code === destination.code) {
+    return 75;
+  }
+
+  const earthRadiusMiles = 3958.8;
+  const latDelta = radians(destination.lat - origin.lat);
+  const lngDelta = radians(destination.lng - origin.lng);
+  const a =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(radians(origin.lat)) *
+      Math.cos(radians(destination.lat)) *
+      Math.sin(lngDelta / 2) *
+      Math.sin(lngDelta / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.max(75, Math.round(earthRadiusMiles * c * 1.14));
+}
+
+function getZone(distanceMiles: number) {
+  if (distanceMiles <= 150) return 2;
+  if (distanceMiles <= 300) return 3;
+  if (distanceMiles <= 600) return 4;
+  if (distanceMiles <= 1000) return 5;
+  if (distanceMiles <= 1400) return 6;
+  if (distanceMiles <= 1800) return 7;
+  return 8;
+}
+
+function getDimWeight(definition: ItemDefinition) {
+  return Math.ceil(
+    (definition.length * definition.width * definition.height) / 139,
   );
-  const itemSubtotal = itemOrder.reduce(
-    (sum, key) => sum + quote.counts[key] * itemDefinitions[key].base,
-    0,
+}
+
+function getQuoteWeights(counts: Record<ItemKey, number>) {
+  return itemOrder.reduce(
+    (totals, key) => {
+      const definition = itemDefinitions[key];
+      const count = counts[key];
+      const dimWeight = getDimWeight(definition);
+      const billable = Math.max(definition.weight, dimWeight);
+
+      return {
+        packages: totals.packages + count,
+        actualWeight: totals.actualWeight + definition.weight * count,
+        dimWeight: totals.dimWeight + dimWeight * count,
+        billableWeight: totals.billableWeight + billable * count,
+      };
+    },
+    { packages: 0, actualWeight: 0, dimWeight: 0, billableWeight: 0 },
   );
+}
+
+function getCarrierRate(
+  provider: CarrierProvider,
+  quote: QuoteState,
+  lane: {
+    origin: USLocation;
+    destination: USLocation;
+    distanceMiles: number;
+    zone: number;
+  },
+): CarrierRate {
+  const profile = carrierProfiles[provider];
+  const weights = getQuoteWeights(quote.counts);
+  const perPound = profile.perLbByZone[lane.zone];
   const speed = speedDefinitions[quote.speed];
-  const pickupFee = quote.pickup ? 26 + packages * 4 : 0;
-  const protectionFee = quote.protection ? Math.max(15, packages * 9) : 0;
-  const businessDiscount = quote.customerType === 'business' ? 0.9 : 1;
-  const total = Math.max(
-    packages ? 28 : 0,
-    Math.round(
-      (itemSubtotal * speed.multiplier + pickupFee + protectionFee) *
-        businessDiscount,
-    ),
+  const hasOversize = itemOrder.some(
+    (key) => quote.counts[key] > 0 && itemDefinitions[key].oversize,
   );
-  const benchmark = Math.max(80, packages * 58 + Math.max(0, billableWeight - 50));
-  const savings = Math.max(0, Math.round(benchmark - total));
+  const packageCharge = weights.packages
+    ? profile.base * weights.packages + weights.billableWeight * perPound
+    : 0;
+  const serviceCharge = packageCharge * speed.multiplier;
+  const additionalHandling =
+    hasOversize || weights.billableWeight >= 70
+      ? profile.additionalHandling * Math.max(1, weights.packages)
+      : 0;
+  const pickupFee = quote.pickup
+    ? profile.pickupFee + weights.packages * 1.75
+    : 0;
+  const residentialFee = quote.residential ? profile.residentialFee : 0;
+  const remoteFee =
+    lane.origin.remote || lane.destination.remote
+      ? (serviceCharge + additionalHandling) * profile.remotePct
+      : 0;
+  const accessorials =
+    pickupFee + residentialFee + additionalHandling + remoteFee;
+  const fuel = (serviceCharge + accessorials) * profile.fuelPct;
+  const protection = quote.protection
+    ? Math.max(8, Math.round(quote.declaredValue * 0.0125))
+    : 0;
+  const subtotal = serviceCharge + accessorials + fuel + protection;
+  const discount = quote.customerType === 'business' ? subtotal * 0.08 : 0;
+  const total = weights.packages
+    ? Math.round(Math.max(22, subtotal - discount))
+    : 0;
+  const deliveryDate = getDeliveryDate(
+    quote.pickupDate,
+    quote.speed,
+    lane.zone,
+  );
 
   return {
-    packages,
-    billableWeight,
+    key: provider,
+    name: profile.name,
+    service: profile.serviceNames[quote.speed],
     total,
-    pickupFee,
-    protectionFee,
-    savings,
-    eta: speed.eta,
-    service: speed.label,
+    base: Math.round(profile.base * weights.packages),
+    transportation: Math.round(serviceCharge),
+    fuel: Math.round(fuel),
+    accessorials: Math.round(accessorials),
+    protection,
+    discount: Math.round(discount),
+    transit: speed.transitByZone[lane.zone] ?? 'carrier confirmation required',
+    deliveryDate,
+    trackingUrl: profile.trackingUrl(''),
+  };
+}
+
+function getDeliveryDate(pickupDate: string, speed: SpeedKey, zone: number) {
+  const date = new Date(`${pickupDate}T12:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return 'Carrier ETA';
+  }
+
+  const businessDays =
+    speed === 'sameDay'
+      ? 0
+      : speed === 'nextDay'
+        ? zone >= 8
+          ? 2
+          : 1
+        : Math.max(1, Math.ceil(zone / 2));
+  let remaining = businessDays;
+
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) {
+      remaining -= 1;
+    }
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function getQuoteMetrics(quote: QuoteState): QuoteMetrics {
+  const origin = locationByCode[quote.originState] ?? locationByCode.TX;
+  const destination =
+    locationByCode[quote.destinationState] ?? locationByCode.CA;
+  const weights = getQuoteWeights(quote.counts);
+  const distanceMiles = getDistanceMiles(origin, destination);
+  const zone = getZone(distanceMiles);
+  const lane = { origin, destination, distanceMiles, zone };
+  const rates = {
+    ups: getCarrierRate('ups', quote, lane),
+    fedex: getCarrierRate('fedex', quote, lane),
+  };
+  const selectedCarrier =
+    quote.carrier === 'ups' || quote.carrier === 'fedex'
+      ? quote.carrier
+      : rates.ups.total <= rates.fedex.total
+        ? 'ups'
+        : 'fedex';
+  const selectedRate = rates[selectedCarrier];
+  const marketBenchmark = Math.round(
+    weights.packages
+      ? weights.packages * 58 + weights.billableWeight * (0.92 + zone * 0.08)
+      : 0,
+  );
+  const availabilityNote =
+    quote.speed === 'sameDay' &&
+    (zone >= 5 || origin.remote || destination.remote)
+      ? 'Same-day availability is limited on this lane; carrier confirmation is required before purchase.'
+      : origin.remote || destination.remote
+        ? 'Alaska and Hawaii use non-contiguous remote-lane pricing and longer carrier confirmation windows.'
+        : 'Domestic USA lane is available for estimate.';
+
+  return {
+    ...weights,
+    distanceMiles,
+    zone,
+    origin,
+    destination,
+    routeLabel: `${formatLocation(origin.code)} to ${formatLocation(destination.code)}`,
+    selectedCarrier,
+    total: selectedRate.total,
+    savings: Math.max(0, marketBenchmark - selectedRate.total),
+    eta: selectedRate.deliveryDate,
+    service: selectedRate.service,
+    protectionFee: selectedRate.protection,
+    pickupFee: quote.pickup
+      ? carrierProfiles[selectedCarrier].pickupFee + weights.packages * 1.75
+      : 0,
+    residentialFee: quote.residential
+      ? carrierProfiles[selectedCarrier].residentialFee
+      : 0,
+    remoteFee:
+      origin.remote || destination.remote
+        ? selectedRate.accessorials -
+          (quote.pickup
+            ? carrierProfiles[selectedCarrier].pickupFee +
+              weights.packages * 1.75
+            : 0) -
+          (quote.residential
+            ? carrierProfiles[selectedCarrier].residentialFee
+            : 0)
+        : 0,
+    rates,
+    availabilityNote,
   };
 }
 
@@ -518,43 +1396,123 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function createFallbackShipment(number: string): Shipment {
+function formatLocation(code: string) {
+  const location = locationByCode[code] ?? usLocations[0];
+  return `${location.city}, ${location.code}`;
+}
+
+function locationSelectOptions() {
+  return usLocations.map((location) => ({
+    value: location.code,
+    label: `${location.code} - ${location.city}, ${location.name} ${location.zip}`,
+  }));
+}
+
+function detectCarrier(trackingNumber: string): TrackingCarrier {
+  const trimmed = trackingNumber.trim().toUpperCase();
+  const digitsOnly = trimmed.replace(/\D/g, '');
+
+  if (/^1Z[0-9A-Z]{16}$/.test(trimmed)) {
+    return 'ups';
+  }
+
+  if ([12, 15, 20, 22].includes(digitsOnly.length)) {
+    return 'fedex';
+  }
+
+  return 'auto';
+}
+
+function getTrackingLinks(
+  trackingNumber: string,
+  carrier: TrackingCarrier,
+): Shipment['trackingLinks'] {
+  const clean = trackingNumber.trim();
+  if (!clean) return [];
+
+  if (carrier === 'ups') {
+    return [
+      {
+        carrier: 'ups',
+        label: 'Open UPS tracking',
+        url: carrierProfiles.ups.trackingUrl(clean),
+      },
+    ];
+  }
+
+  if (carrier === 'fedex') {
+    return [
+      {
+        carrier: 'fedex',
+        label: 'Open FedEx tracking',
+        url: carrierProfiles.fedex.trackingUrl(clean),
+      },
+    ];
+  }
+
+  return [
+    {
+      carrier: 'ups',
+      label: 'Try UPS tracking',
+      url: carrierProfiles.ups.trackingUrl(clean),
+    },
+    {
+      carrier: 'fedex',
+      label: 'Try FedEx tracking',
+      url: carrierProfiles.fedex.trackingUrl(clean),
+    },
+  ];
+}
+
+function createFallbackShipment(
+  number: string,
+  selectedCarrier: TrackingCarrier = 'auto',
+): Shipment {
+  const carrier =
+    selectedCarrier === 'auto' ? detectCarrier(number) : selectedCarrier;
+  const links = getTrackingLinks(number, carrier);
+  const carrierName =
+    carrier === 'ups' ? 'UPS' : carrier === 'fedex' ? 'FedEx' : 'carrier';
+
   return {
     number: number || 'COEX-GUEST-2048',
-    status: 'LABEL CREATED',
-    progress: 22,
-    origin: 'Origin pending',
-    destination: 'Destination pending',
-    mode: 'Courier / freight',
-    eta: 'Pending first scan',
+    carrier,
+    status: links.length ? 'CARRIER LOOKUP READY' : 'LABEL CREATED',
+    progress: links.length ? 18 : 22,
+    origin: 'USA origin pending',
+    destination: 'USA destination pending',
+    mode: `${carrierName} tracking handoff`,
+    eta: links.length ? 'Open carrier page for live ETA' : 'Pending first scan',
     pieces: '1 shipment',
     documents: ['Digital label pending first carrier scan'],
+    trackingLinks: links,
+    exception: links.length
+      ? 'Open the carrier tracking page for live scans. API credentials can replace this handoff with embedded live status.'
+      : undefined,
     milestones: [
       {
-        title: 'Quote reserved',
-        detail: 'Shipment staged in the demo console',
+        title: 'Tracking number received',
+        detail: 'Entered in COEX tracker',
         done: true,
       },
       {
-        title: 'Label created',
-        detail: 'Ready for pickup or drop-off',
-        done: true,
+        title: `${carrierName} handoff prepared`,
+        detail: links.length
+          ? 'Carrier tracking link is ready'
+          : 'Waiting for a carrier number',
+        done: links.length > 0,
       },
       {
-        title: 'Carrier accepted',
-        detail: 'Pending first scan',
+        title: 'Live carrier scan',
+        detail: 'Opens on UPS or FedEx',
         done: false,
       },
       {
-        title: 'In transit',
-        detail: 'Pending',
+        title: 'Out for delivery',
+        detail: 'Carrier confirmation pending',
         done: false,
       },
-      {
-        title: 'Delivered',
-        detail: 'Pending',
-        done: false,
-      },
+      { title: 'Delivered', detail: 'Carrier proof pending', done: false },
     ],
   };
 }
@@ -566,20 +1524,32 @@ function useQuoteState() {
   }));
 }
 
+function updateCount(
+  setQuote: Dispatch<SetStateAction<QuoteState>>,
+  key: ItemKey,
+  delta: number,
+) {
+  setQuote((current) => ({
+    ...current,
+    counts: {
+      ...current.counts,
+      [key]: Math.max(0, Math.min(12, current.counts[key] + delta)),
+    },
+  }));
+}
+
 function useWebMcpTools({
   quote,
   setQuote,
   setShipment,
 }: {
   quote: QuoteState;
-  setQuote: React.Dispatch<React.SetStateAction<QuoteState>>;
-  setShipment: React.Dispatch<React.SetStateAction<Shipment>>;
+  setQuote: Dispatch<SetStateAction<QuoteState>>;
+  setShipment: Dispatch<SetStateAction<Shipment>>;
 }) {
   useEffect(() => {
     const registerTool = document.modelContext?.registerTool;
-    if (!registerTool) {
-      return;
-    }
+    if (!registerTool) return;
 
     const lifecycle = new AbortController();
     const register = (tool: WebMcpTool) => {
@@ -590,21 +1560,27 @@ function useWebMcpTools({
 
     register({
       name: 'calculate_quote',
-      title: 'Calculate quote',
+      title: 'Calculate domestic quote',
       description:
-        'Stage a COEX Shipping quote using the visible quote calculator state.',
+        'Calculate a USA-only COEX Shipping estimate using state lane, package counts, speed, carrier, and surcharge settings.',
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       inputSchema: {
         type: 'object',
         properties: {
-          origin: { type: 'string' },
-          destination: { type: 'string' },
-          speed: {
+          originState: {
             type: 'string',
-            enum: ['standard', 'nextDay', 'sameDay'],
+            enum: usLocations.map((location) => location.code),
           },
+          destinationState: {
+            type: 'string',
+            enum: usLocations.map((location) => location.code),
+          },
+          speed: { type: 'string', enum: ['standard', 'nextDay', 'sameDay'] },
+          carrier: { type: 'string', enum: ['best', 'ups', 'fedex'] },
           protection: { type: 'boolean' },
           pickup: { type: 'boolean' },
+          residential: { type: 'boolean' },
+          declaredValue: { type: 'number', minimum: 0, maximum: 25000 },
           customerType: { type: 'string', enum: ['individual', 'business'] },
           items: {
             type: 'object',
@@ -637,25 +1613,51 @@ function useWebMcpTools({
           }
         }
 
+        const originState =
+          typeof value.originState === 'string' &&
+          locationByCode[value.originState]
+            ? value.originState
+            : quote.originState;
+        const destinationState =
+          typeof value.destinationState === 'string' &&
+          locationByCode[value.destinationState]
+            ? value.destinationState
+            : quote.destinationState;
+        const speed =
+          value.speed === 'nextDay' || value.speed === 'sameDay'
+            ? value.speed
+            : value.speed === 'standard'
+              ? 'standard'
+              : quote.speed;
+        const carrier =
+          value.carrier === 'ups' || value.carrier === 'fedex'
+            ? value.carrier
+            : value.carrier === 'best'
+              ? 'best'
+              : quote.carrier;
+
         const nextQuote: QuoteState = {
           ...quote,
           counts,
-          origin: typeof value.origin === 'string' ? value.origin : quote.origin,
-          destination:
-            typeof value.destination === 'string'
-              ? value.destination
-              : quote.destination,
-          speed:
-            value.speed === 'nextDay' || value.speed === 'sameDay'
-              ? value.speed
-              : value.speed === 'standard'
-                ? 'standard'
-                : quote.speed,
+          originState,
+          destinationState,
+          speed,
+          carrier,
           protection:
             typeof value.protection === 'boolean'
               ? value.protection
               : quote.protection,
-          pickup: typeof value.pickup === 'boolean' ? value.pickup : quote.pickup,
+          pickup:
+            typeof value.pickup === 'boolean' ? value.pickup : quote.pickup,
+          residential:
+            typeof value.residential === 'boolean'
+              ? value.residential
+              : quote.residential,
+          declaredValue:
+            typeof value.declaredValue === 'number' &&
+            Number.isFinite(value.declaredValue)
+              ? Math.max(0, Math.min(25000, Math.round(value.declaredValue)))
+              : quote.declaredValue,
           customerType:
             value.customerType === 'business'
               ? 'business'
@@ -671,11 +1673,20 @@ function useWebMcpTools({
           quote: {
             total: metrics.total,
             formattedTotal: formatMoney(metrics.total),
+            selectedCarrier: metrics.selectedCarrier,
+            route: metrics.routeLabel,
+            zone: metrics.zone,
+            distanceMiles: metrics.distanceMiles,
             packages: metrics.packages,
+            actualWeight: metrics.actualWeight,
+            dimWeight: metrics.dimWeight,
             billableWeight: metrics.billableWeight,
             eta: metrics.eta,
             service: metrics.service,
             savings: metrics.savings,
+            ups: metrics.rates.ups.total,
+            fedex: metrics.rates.fedex.total,
+            note: metrics.availabilityNote,
           },
         };
       },
@@ -685,12 +1696,13 @@ function useWebMcpTools({
       name: 'track_shipment',
       title: 'Track shipment',
       description:
-        'Look up a demo COEX shipment and update the visible tracking panel.',
+        'Track a COEX demo shipment or prepare UPS/FedEx tracking links for a real carrier number.',
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       inputSchema: {
         type: 'object',
         properties: {
           trackingNumber: { type: 'string' },
+          carrier: { type: 'string', enum: ['auto', 'ups', 'fedex'] },
         },
         required: ['trackingNumber'],
         additionalProperties: false,
@@ -700,25 +1712,34 @@ function useWebMcpTools({
           typeof input === 'object' && input !== null
             ? (input as Record<string, unknown>)
             : {};
-        if (typeof value.trackingNumber !== 'string' || !value.trackingNumber.trim()) {
+        if (
+          typeof value.trackingNumber !== 'string' ||
+          !value.trackingNumber.trim()
+        ) {
           throw new Error('trackingNumber is required');
         }
 
         const requested = value.trackingNumber.trim().toUpperCase();
+        const carrier =
+          value.carrier === 'ups' || value.carrier === 'fedex'
+            ? value.carrier
+            : 'auto';
         const shipment =
           sampleShipments.find((item) => item.number === requested) ??
-          createFallbackShipment(requested);
+          createFallbackShipment(requested, carrier);
         setShipment(shipment);
 
         return {
           status: 'tracking_ready',
           shipment: {
             number: shipment.number,
+            carrier: shipment.carrier,
             status: shipment.status,
             progress: shipment.progress,
             origin: shipment.origin,
             destination: shipment.destination,
             eta: shipment.eta,
+            trackingLinks: shipment.trackingLinks,
           },
         };
       },
@@ -740,8 +1761,8 @@ function ShippingFrame({
       theme={{
         token: {
           colorPrimary: '#0f8f93',
-          colorSuccess: '#18a058',
-          colorWarning: '#e0a11a',
+          colorSuccess: '#16854e',
+          colorWarning: '#c78300',
           colorInfo: '#2457c5',
           colorTextBase: '#152935',
           colorBgBase: '#f5fbfa',
@@ -751,21 +1772,11 @@ function ShippingFrame({
             'var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif',
         },
         components: {
-          Button: {
-            controlHeight: 42,
-            borderRadius: 8,
-            fontWeight: 650,
-          },
-          Card: {
-            borderRadiusLG: 8,
-            paddingLG: 22,
-          },
-          Menu: {
-            itemBorderRadius: 8,
-          },
-          Steps: {
-            colorPrimary: '#0f8f93',
-          },
+          Button: { controlHeight: 42, borderRadius: 8, fontWeight: 650 },
+          Card: { borderRadiusLG: 8, paddingLG: 22 },
+          Menu: { itemBorderRadius: 8 },
+          Select: { borderRadius: 8 },
+          Steps: { colorPrimary: '#0f8f93' },
         },
       }}
     >
@@ -773,11 +1784,11 @@ function ShippingFrame({
         <Header className="ship-header">
           <Link className="ship-logo" href="/" aria-label="COEX Shipping home">
             <span className="ship-logo-mark">
-              <GlobalOutlined />
+              <TruckOutlined />
             </span>
             <span>
               <strong>COEX Shipping</strong>
-              <small>Connect Express</small>
+              <small>USA Connect Express</small>
             </span>
           </Link>
           <Menu
@@ -786,56 +1797,66 @@ function ShippingFrame({
             selectedKeys={[active]}
             items={[
               { key: 'home', label: <Link href="/">Overview</Link> },
-              { key: 'services', label: <Link href="/#services">Services</Link> },
               { key: 'quote', label: <Link href="/quote">Quote</Link> },
-              { key: 'tracking', label: <Link href="/tracking">Tracking</Link> },
+              {
+                key: 'tracking',
+                label: <Link href="/tracking">Tracking</Link>,
+              },
               { key: 'book', label: <Link href="/book">Book</Link> },
             ]}
           />
-          <Space className="ship-header-actions" size={8}>
-            <Button href="/login" icon={<UserOutlined />} className="ship-signin">
+          <Space className="ship-header-actions" size={10}>
+            <Button
+              className="ship-signin"
+              href="/login"
+              icon={<UserOutlined />}
+            >
               Sign in
             </Button>
-            <Button type="primary" href="/quote" icon={<ArrowRightOutlined />}>
-              Get a Quote
+            <Button
+              type="primary"
+              href="/quote"
+              icon={<DollarCircleOutlined />}
+            >
+              Get quote
             </Button>
           </Space>
         </Header>
         <Content>{children}</Content>
         <Footer className="ship-footer">
           <Row gutter={[24, 24]}>
-            <Col xs={24} lg={9}>
+            <Col xs={24} md={10}>
               <Space align="start" size={12}>
                 <span className="ship-footer-mark">
-                  <GlobalOutlined />
+                  <TruckOutlined />
                 </span>
                 <div>
                   <Title level={4}>COEX Shipping</Title>
                   <Paragraph>
-                    Global freight forwarding across ocean, air and inland
-                    logistics, redesigned as a premium quote-to-delivery platform.
+                    USA-only shipping experience for luggage, parcels, freight
+                    workflows, quotes, carrier handoff, documents, and tracking.
                   </Paragraph>
-                  <Space wrap>
-                    <Tag icon={<PhoneOutlined />}>+1 862-381-9018</Tag>
-                    <Tag icon={<MailOutlined />}>hello@coexshipping.com</Tag>
-                  </Space>
                 </div>
               </Space>
             </Col>
-            {[
-              ['Services', ['Ocean Freight', 'Air Freight', 'Road Transportation', 'Warehousing']],
-              ['Solutions', ['Retail & E-commerce', 'Manufacturing', 'Healthcare', 'Energy Cargo']],
-              ['Tools', ['Quote Calculator', 'Shipment Tracking', 'Booking Wizard', 'Guest Account']],
-            ].map(([heading, links]) => (
-              <Col xs={12} md={8} lg={5} key={heading as string}>
-                <Title level={5}>{heading}</Title>
-                <ul className="ship-footer-list">
-                  {(links as string[]).map((link) => (
-                    <li key={link}>{link}</li>
-                  ))}
-                </ul>
-              </Col>
-            ))}
+            <Col xs={24} md={7}>
+              <Text strong>Contact</Text>
+              <ul className="ship-footer-list">
+                <li>
+                  <PhoneOutlined /> +1 862-381-9018
+                </li>
+                <li>
+                  <MailOutlined /> hello@coexshipping.com
+                </li>
+              </ul>
+            </Col>
+            <Col xs={24} md={7}>
+              <Text strong>Carrier readiness</Text>
+              <ul className="ship-footer-list">
+                <li>UPS Rating, Shipping, Tracking, Address Validation</li>
+                <li>FedEx Rates, Transit Times, Tracking, Webhooks</li>
+              </ul>
+            </Col>
           </Row>
         </Footer>
       </Layout>
@@ -843,185 +1864,289 @@ function ShippingFrame({
   );
 }
 
-function MetricStrip() {
+function LocationSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
-    <Row gutter={[12, 12]} className="ship-metrics">
-      {coexMetrics.map(([value, label]) => (
-        <Col xs={12} sm={6} key={label}>
-          <Card className="metric-card">
-            <Statistic value={value} title={label} />
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  );
-}
-
-function HeroVisualCard() {
-  return (
-    <Card className="visual-card" styles={{ body: { padding: 0 } }}>
-      <Image
-        alt="Luggage, sports gear, boxes, labels and a phone prepared for shipment"
-        className="hero-image"
-        height={1024}
-        priority
-        src="/hero-logistics.png"
-        width={1792}
+    <Form.Item label={label}>
+      <Select
+        showSearch={{ optionFilterProp: 'label' }}
+        value={value}
+        options={locationSelectOptions()}
+        onChange={onChange}
       />
-      <div className="visual-overlay">
-        <Space align="center" className="visual-status">
-          <Badge status="processing" />
-          <Text strong>Live shipment command center</Text>
-        </Space>
-        <div className="route-line">
-          <span>Shanghai</span>
-          <i />
-          <span>Los Angeles</span>
-        </div>
-        <Row gutter={8}>
-          {[
-            ['Mode', "Ocean - FCL 40'"],
-            ['ETA', '29 Mar'],
-            ['Status', 'In transit'],
-          ].map(([label, value]) => (
-            <Col span={8} key={label}>
-              <div className="mini-stat">
-                <small>{label}</small>
-                <strong>{value}</strong>
-              </div>
-            </Col>
-          ))}
-        </Row>
-      </div>
-    </Card>
+    </Form.Item>
   );
 }
 
-function CompactQuoteCard({
+function QuotePanel({
   quote,
   setQuote,
+  compact = false,
 }: {
   quote: QuoteState;
-  setQuote: React.Dispatch<React.SetStateAction<QuoteState>>;
+  setQuote: Dispatch<SetStateAction<QuoteState>>;
+  compact?: boolean;
 }) {
   const metrics = getQuoteMetrics(quote);
+  const topItems = compact ? itemOrder.slice(0, 4) : itemOrder;
 
   return (
     <Card className="quote-card ant-card-premium">
       <Space orientation="vertical" size={18} className="full-width">
-        <div className="section-kicker">Instant quote</div>
-        <Title level={2}>Choose cargo. See the lane. Reserve the plan.</Title>
-        <Segmented
-          block
-          value={quote.customerType}
-          onChange={(value) =>
-            setQuote((current) => ({
-              ...current,
-              customerType: value as CustomerType,
-            }))
-          }
-          options={[
-            { label: 'Individual', value: 'individual' },
-            { label: 'Business', value: 'business' },
-          ]}
-        />
-        <Row gutter={[10, 10]}>
-          {(['checked', 'box', 'golf', 'ski'] as ItemKey[]).map((key) => {
-            const item = itemDefinitions[key];
-            const active = quote.counts[key] > 0;
+        <div className="quote-heading">
+          <div>
+            <div className="section-kicker">USA domestic estimate</div>
+            <Title level={compact ? 3 : 2}>Quote every state lane</Title>
+          </div>
+          <Tag color="cyan">50 states + DC</Tag>
+        </div>
+
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={12}>
+            <LocationSelect
+              label="Origin"
+              value={quote.originState}
+              onChange={(originState) =>
+                setQuote((current) => ({ ...current, originState }))
+              }
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <LocationSelect
+              label="Destination"
+              value={quote.destinationState}
+              onChange={(destinationState) =>
+                setQuote((current) => ({ ...current, destinationState }))
+              }
+            />
+          </Col>
+        </Row>
+
+        <Row gutter={[12, 12]}>
+          {topItems.map((key) => {
+            const definition = itemDefinitions[key];
             return (
-              <Col span={12} key={key}>
+              <Col xs={24} sm={compact ? 12 : 8} key={key}>
                 <button
-                  className={`cargo-choice ${active ? 'active' : ''}`}
+                  className={`cargo-choice ${quote.counts[key] > 0 ? 'active' : ''}`}
                   type="button"
-                  onClick={() =>
-                    setQuote((current) => ({
-                      ...current,
-                      counts: {
-                        ...current.counts,
-                        [key]: active ? 0 : 1,
-                      },
-                    }))
-                  }
+                  onClick={() => updateCount(setQuote, key, 1)}
                 >
-                  <span>{item.icon}</span>
-                  <strong>{item.label}</strong>
-                  <small>{item.sublabel}</small>
+                  <span>{definition.icon}</span>
+                  <strong>{definition.label}</strong>
+                  <small>{definition.max}</small>
+                  <b>{quote.counts[key]} selected</b>
                 </button>
               </Col>
             );
           })}
         </Row>
-        <Row gutter={[10, 10]}>
-          <Col xs={24} md={12}>
-            <Input
-              aria-label="Pickup origin"
-              prefix={<EnvironmentOutlined />}
-              value={quote.origin}
-              onChange={(event) =>
-                setQuote((current) => ({ ...current, origin: event.target.value }))
-              }
-            />
+
+        <Space orientation="vertical" size={12} className="full-width">
+          <Radio.Group
+            className="service-radio full-width"
+            optionType="button"
+            buttonStyle="solid"
+            value={quote.speed}
+            onChange={(event) =>
+              setQuote((current) => ({
+                ...current,
+                speed: event.target.value as SpeedKey,
+              }))
+            }
+          >
+            {Object.entries(speedDefinitions).map(([key, speed]) => (
+              <Radio.Button value={key} key={key}>
+                <strong>{speed.label}</strong>
+                <small>{speed.detail}</small>
+              </Radio.Button>
+            ))}
+          </Radio.Group>
+
+          <Segmented
+            block
+            value={quote.carrier}
+            onChange={(value) =>
+              setQuote((current) => ({
+                ...current,
+                carrier: value as CarrierKey,
+              }))
+            }
+            options={[
+              { label: 'Best rate', value: 'best' },
+              { label: 'UPS', value: 'ups' },
+              { label: 'FedEx', value: 'fedex' },
+            ]}
+          />
+        </Space>
+
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={compact ? 24 : 8}>
+            <Form.Item label="Declared value">
+              <Slider
+                min={0}
+                max={5000}
+                step={50}
+                value={quote.declaredValue}
+                onChange={(declaredValue) =>
+                  setQuote((current) => ({ ...current, declaredValue }))
+                }
+              />
+              <Text strong>{formatMoney(quote.declaredValue)}</Text>
+            </Form.Item>
           </Col>
-          <Col xs={24} md={12}>
-            <Input
-              aria-label="Destination"
-              prefix={<EnvironmentOutlined />}
-              value={quote.destination}
+          <Col xs={24} md={compact ? 12 : 8}>
+            <Checkbox
+              checked={quote.pickup}
               onChange={(event) =>
                 setQuote((current) => ({
                   ...current,
-                  destination: event.target.value,
+                  pickup: event.target.checked,
                 }))
               }
-            />
+            >
+              Doorstep pickup
+            </Checkbox>
+          </Col>
+          <Col xs={24} md={compact ? 12 : 8}>
+            <Checkbox
+              checked={quote.protection}
+              onChange={(event) =>
+                setQuote((current) => ({
+                  ...current,
+                  protection: event.target.checked,
+                }))
+              }
+            >
+              Shipment protection
+            </Checkbox>
           </Col>
         </Row>
-        <Radio.Group
-          className="full-width service-radio"
-          optionType="button"
-          buttonStyle="solid"
-          value={quote.speed}
-          onChange={(event) =>
-            setQuote((current) => ({
-              ...current,
-              speed: event.target.value as SpeedKey,
-            }))
-          }
-        >
-          {Object.entries(speedDefinitions).map(([key, speed]) => (
-            <Radio.Button key={key} value={key}>
-              {speed.label}
-            </Radio.Button>
-          ))}
-        </Radio.Group>
+
         <div className="estimate-panel">
-          <Statistic title="Estimated total" value={metrics.total} prefix="$" />
-          <Text type="secondary">
-            {metrics.packages} pieces, {metrics.billableWeight} lb billable, ETA{' '}
-            {metrics.eta}
-          </Text>
-          <Button type="primary" href="/quote" icon={<ArrowRightOutlined />}>
-            Open full calculator
-          </Button>
+          <Row gutter={[12, 12]} align="middle">
+            <Col xs={24} md={9}>
+              <Statistic
+                title={`${carrierProfiles[metrics.selectedCarrier].name} estimate`}
+                value={metrics.total}
+                prefix="$"
+                styles={{ content: { color: '#132935', fontWeight: 800 } }}
+              />
+              <Text type="secondary">{metrics.service}</Text>
+            </Col>
+            <Col xs={12} md={5}>
+              <div className="mini-stat">
+                <small>Lane</small>
+                <strong>{metrics.routeLabel}</strong>
+              </div>
+            </Col>
+            <Col xs={12} md={5}>
+              <div className="mini-stat">
+                <small>Zone / miles</small>
+                <strong>
+                  Zone {metrics.zone} / {metrics.distanceMiles}
+                </strong>
+              </div>
+            </Col>
+            <Col xs={24} md={5}>
+              <div className="mini-stat">
+                <small>ETA</small>
+                <strong>{metrics.eta}</strong>
+              </div>
+            </Col>
+          </Row>
         </div>
+
+        <Alert
+          type="info"
+          showIcon
+          title={metrics.availabilityNote}
+          description="For exact carrier account pricing, connect UPS and FedEx credentials in the production environment. This UI is already structured for live Rating and Tracking API responses."
+        />
+
+        <Button
+          type="primary"
+          size="large"
+          block
+          href="/quote"
+          icon={<ArrowRightOutlined />}
+        >
+          Build full estimate
+        </Button>
       </Space>
     </Card>
   );
 }
 
-function updateCount(
-  setQuote: React.Dispatch<React.SetStateAction<QuoteState>>,
-  key: ItemKey,
-  delta: number,
-) {
-  setQuote((quote) => ({
-    ...quote,
-    counts: {
-      ...quote.counts,
-      [key]: Math.max(0, Math.min(12, quote.counts[key] + delta)),
-    },
-  }));
+function CarrierComparison({ metrics }: { metrics: QuoteMetrics }) {
+  return (
+    <Row gutter={[12, 12]}>
+      {(['ups', 'fedex'] as CarrierProvider[]).map((provider) => {
+        const rate = metrics.rates[provider];
+        const active = metrics.selectedCarrier === provider;
+
+        return (
+          <Col xs={24} md={12} key={provider}>
+            <div className={`carrier-rate-card ${active ? 'active' : ''}`}>
+              <Space align="center" size={12}>
+                <span className="service-icon">
+                  <TruckOutlined />
+                </span>
+                <div>
+                  <Text strong>{rate.name}</Text>
+                  <Paragraph>{rate.service}</Paragraph>
+                </div>
+              </Space>
+              <Statistic
+                title={rate.transit}
+                value={rate.total}
+                prefix="$"
+                styles={{ content: { color: active ? '#0f8f93' : '#132935' } }}
+              />
+              <Descriptions
+                column={1}
+                size="small"
+                items={[
+                  {
+                    key: 'transport',
+                    label: 'Transport',
+                    children: formatMoney(rate.transportation),
+                  },
+                  {
+                    key: 'fuel',
+                    label: 'Fuel',
+                    children: formatMoney(rate.fuel),
+                  },
+                  {
+                    key: 'fees',
+                    label: 'Fees',
+                    children: formatMoney(rate.accessorials),
+                  },
+                  {
+                    key: 'protection',
+                    label: 'Protection',
+                    children: formatMoney(rate.protection),
+                  },
+                  {
+                    key: 'discount',
+                    label: 'Discount',
+                    children: `-${formatMoney(rate.discount)}`,
+                  },
+                ]}
+              />
+            </div>
+          </Col>
+        );
+      })}
+    </Row>
+  );
 }
 
 function TrackingPanel({
@@ -1029,93 +2154,127 @@ function TrackingPanel({
   setShipment,
 }: {
   shipment: Shipment;
-  setShipment: React.Dispatch<React.SetStateAction<Shipment>>;
+  setShipment: Dispatch<SetStateAction<Shipment>>;
 }) {
   const [trackingNumber, setTrackingNumber] = useState(shipment.number);
+  const [carrier, setCarrier] = useState<TrackingCarrier>('auto');
 
-  function track(value?: string) {
-    const requested = (value || trackingNumber).trim().toUpperCase();
-    const next =
-      sampleShipments.find((item) => item.number === requested) ??
-      createFallbackShipment(requested);
-    setTrackingNumber(requested);
-    setShipment(next);
+  function runSearch() {
+    const requested = trackingNumber.trim().toUpperCase();
+    const demo = sampleShipments.find((item) => item.number === requested);
+    setShipment(demo ?? createFallbackShipment(requested, carrier));
   }
-
-  const timelineItems = shipment.milestones.map((item) => ({
-    color: item.done ? '#0f8f93' : '#c4d5d2',
-    icon: item.done ? <CheckCircleFilled /> : undefined,
-    content: (
-      <div>
-        <Text strong>{item.title}</Text>
-        <Paragraph className="timeline-detail">{item.detail}</Paragraph>
-      </div>
-    ),
-  }));
 
   return (
     <Card className="tracking-card ant-card-premium">
-      <Space orientation="vertical" size={18} className="full-width">
-        <Input.Search
-          aria-label="Tracking number"
-          enterButton="Track shipment"
-          prefix={<SearchOutlined />}
-          value={trackingNumber}
-          onChange={(event) => setTrackingNumber(event.target.value)}
-          onSearch={track}
-        />
-        <div className="tracking-head">
-          <div>
-            <Tag color="cyan">{shipment.number}</Tag>
-            <Title level={3}>
-              {shipment.origin} <ArrowRightOutlined /> {shipment.destination}
-            </Title>
-            <Text type="secondary">
-              {shipment.mode} - {shipment.pieces}
-            </Text>
-          </div>
-          <Tag color={shipment.status.includes('TRANSIT') ? 'blue' : 'gold'}>
-            {shipment.status}
-          </Tag>
-        </div>
-        <Progress percent={shipment.progress} strokeColor="#0f8f93" />
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={14}>
-            <Timeline items={timelineItems} />
+      <Space orientation="vertical" className="full-width" size={18}>
+        <Row gutter={[12, 12]}>
+          <Col xs={24} lg={12}>
+            <Input.Search
+              size="large"
+              value={trackingNumber}
+              onChange={(event) => setTrackingNumber(event.target.value)}
+              enterButton="Track"
+              prefix={<SearchOutlined />}
+              onSearch={runSearch}
+              placeholder="COEX-8143-2290, 1Z..., or FedEx number"
+            />
           </Col>
-          <Col xs={24} lg={10}>
-            <Descriptions
-              bordered
-              column={1}
-              size="small"
-              items={[
-                { key: 'eta', label: 'Estimated arrival', children: shipment.eta },
-                { key: 'origin', label: 'Origin', children: shipment.origin },
-                {
-                  key: 'destination',
-                  label: 'Destination',
-                  children: shipment.destination,
-                },
-                { key: 'mode', label: 'Mode', children: shipment.mode },
+          <Col xs={24} lg={12}>
+            <Segmented
+              block
+              value={carrier}
+              onChange={(value) => setCarrier(value as TrackingCarrier)}
+              options={[
+                { label: 'Auto detect', value: 'auto' },
+                { label: 'UPS', value: 'ups' },
+                { label: 'FedEx', value: 'fedex' },
               ]}
             />
-            <Divider titlePlacement="left">Documents</Divider>
+          </Col>
+        </Row>
+
+        <div className="tracking-head">
+          <div>
+            <Tag color={shipment.status.includes('READY') ? 'gold' : 'cyan'}>
+              {shipment.status}
+            </Tag>
+            <Title level={2}>{shipment.number}</Title>
+            <Text type="secondary">
+              {shipment.origin} to {shipment.destination}
+            </Text>
+          </div>
+          <div className="tracking-actions">
+            {shipment.trackingLinks.map((trackingLink) => (
+              <Button
+                key={trackingLink.url}
+                href={trackingLink.url}
+                target="_blank"
+                rel="noreferrer"
+                icon={<LinkOutlined />}
+              >
+                {trackingLink.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Progress percent={shipment.progress} status="active" />
+
+        <Row gutter={[18, 18]}>
+          <Col xs={24} lg={15}>
+            <Timeline
+              items={shipment.milestones.map((milestone) => ({
+                color: milestone.done ? 'green' : 'gray',
+                dot: milestone.done ? (
+                  <CheckCircleFilled className="primary-icon" />
+                ) : undefined,
+                children: (
+                  <div>
+                    <Text strong>{milestone.title}</Text>
+                    <Paragraph className="timeline-detail">
+                      {milestone.detail}
+                    </Paragraph>
+                  </div>
+                ),
+              }))}
+            />
+          </Col>
+          <Col xs={24} lg={9}>
+            <Descriptions
+              bordered
+              size="small"
+              column={1}
+              items={[
+                { key: 'mode', label: 'Mode', children: shipment.mode },
+                { key: 'eta', label: 'ETA', children: shipment.eta },
+                { key: 'pieces', label: 'Pieces', children: shipment.pieces },
+                {
+                  key: 'carrier',
+                  label: 'Carrier',
+                  children:
+                    shipment.carrier === 'ups'
+                      ? 'UPS'
+                      : shipment.carrier === 'fedex'
+                        ? 'FedEx'
+                        : 'COEX / auto',
+                },
+              ]}
+            />
+            <Divider />
+            <Text strong>Documents</Text>
             <ul className="document-list">
               {shipment.documents.map((document) => (
-                <li key={document}>
-                  <Space>
-                    <FileDoneOutlined className="primary-icon" />
-                    {document}
-                  </Space>
-                </li>
+                <li key={document}>{document}</li>
               ))}
             </ul>
             {shipment.exception ? (
               <Alert
                 className="tracking-alert"
-                type="success"
+                type="info"
                 showIcon
-                title={shipment.exception}
+                title="Tracking note"
+                description={shipment.exception}
               />
             ) : null}
           </Col>
@@ -1125,144 +2284,140 @@ function TrackingPanel({
   );
 }
 
+function CoverageMap({ metrics }: { metrics: QuoteMetrics }) {
+  return (
+    <div className="coverage-map">
+      <div className="map-label origin">
+        <EnvironmentOutlined />
+        {metrics.origin.city}, {metrics.origin.code}
+      </div>
+      <div className="map-label destination">
+        <TruckOutlined />
+        {metrics.destination.city}, {metrics.destination.code}
+      </div>
+      <div className="map-lane" />
+      <div className="map-data-card">
+        <Text strong>Domestic lane</Text>
+        <Title level={3}>Zone {metrics.zone}</Title>
+        <Paragraph>
+          {metrics.distanceMiles} modeled miles, {metrics.billableWeight} lb
+          billable, {carrierProfiles[metrics.selectedCarrier].name} selected.
+        </Paragraph>
+      </div>
+    </div>
+  );
+}
+
 export function HomePage() {
   const [quote, setQuote] = useQuoteState();
   const [shipment, setShipment] = useState<Shipment>(sampleShipments[0]);
+  const metrics = getQuoteMetrics(quote);
   useWebMcpTools({ quote, setQuote, setShipment });
 
   return (
     <ShippingFrame active="home">
       <section className="hero-section">
-        <Row gutter={[32, 32]} align="middle">
-          <Col xs={24} lg={12}>
-            <Space orientation="vertical" size={22}>
-              <Tag color="cyan" icon={<Badge status="processing" />}>
-                Global logistics & freight forwarding
+        <Row gutter={[28, 28]} align="middle">
+          <Col xs={24} lg={13}>
+            <Space orientation="vertical" size={22} className="full-width">
+              <Tag color="cyan" icon={<GlobalOutlined />}>
+                USA-only shipping platform
               </Tag>
-              <div>
-                <Title className="hero-title">Moving your business across the world.</Title>
-                <Paragraph className="hero-subtitle">
-                  COEX Shipping provides reliable ocean, air and inland logistics
-                  with the visibility and control your supply chain demands.
-                </Paragraph>
-              </div>
-              <Space wrap size={12}>
+              <Title className="hero-title">
+                Ship luggage, boxes, and freight across every US state.
+              </Title>
+              <Paragraph className="hero-subtitle">
+                A premium COEX Connect Express redesign with LugLess-style
+                quoting, Ant Design systems, state-by-state pricing, UPS and
+                FedEx tracking handoff, booking, documents, and shipment
+                visibility.
+              </Paragraph>
+              <Row gutter={[12, 12]} className="ship-metrics">
+                {coverageMetrics.map(([value, label]) => (
+                  <Col xs={12} md={6} key={label}>
+                    <Card className="metric-card">
+                      <Statistic title={label} value={value} />
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+              <Space wrap>
                 <Button
                   type="primary"
                   size="large"
                   href="/quote"
                   icon={<DollarCircleOutlined />}
                 >
-                  Get a Quote
+                  Price a lane
                 </Button>
                 <Button size="large" href="/tracking" icon={<SearchOutlined />}>
-                  Track Shipment
+                  Track package
                 </Button>
               </Space>
-              <MetricStrip />
             </Space>
           </Col>
-          <Col xs={24} lg={12}>
-            <CompactQuoteCard quote={quote} setQuote={setQuote} />
+          <Col xs={24} lg={11}>
+            <QuotePanel quote={quote} setQuote={setQuote} compact />
           </Col>
         </Row>
       </section>
 
-      <section className="content-band">
-        <Row gutter={[24, 24]} align="middle">
-          <Col xs={24} lg={11}>
-            <HeroVisualCard />
-          </Col>
-          <Col xs={24} lg={13}>
-            <div className="section-kicker">Built for certainty</div>
-            <Title level={2}>
-              Rates you can plan against, documents that clear, milestones you
-              can see before they become problems.
-            </Title>
-            <Paragraph>
-              COEX was built by freight operators. The public reference centers
-              on contracted capacity, trusted carriers, ports, warehouses, local
-              partners, and one team accountable from booking to delivery.
-            </Paragraph>
-            <Row gutter={[12, 12]}>
+      <section className="visual-band">
+        <div className="visual-card">
+          <Image
+            src="/hero-logistics.png"
+            alt="Modern COEX shipping operations with parcels and domestic carrier flow"
+            width={1600}
+            height={960}
+            className="hero-image"
+            priority
+          />
+          <div className="visual-overlay">
+            <div className="route-line">
+              <span>{formatLocation(quote.originState)}</span>
+              <i />
+              <span>{formatLocation(quote.destinationState)}</span>
+            </div>
+            <Row gutter={[8, 8]}>
               {[
-                ['Reliable', 'Contracted capacity and disciplined milestone management.'],
-                ['Transparent', 'Clear rates, documents, and destination line items.'],
-                ['Technology-Driven', 'Quotes, bookings, documents, and tracking together.'],
-                ['Customer-Focused', 'A named logistics team in your time zone.'],
-              ].map(([title, text]) => (
-                <Col xs={24} sm={12} key={title}>
-                  <Card className="micro-card">
-                    <Title level={5}>{title}</Title>
-                    <Paragraph>{text}</Paragraph>
-                  </Card>
+                ['Best carrier', carrierProfiles[metrics.selectedCarrier].name],
+                ['Estimate', formatMoney(metrics.total)],
+                ['Delivery', metrics.eta],
+                ['Zone', String(metrics.zone)],
+              ].map(([label, value]) => (
+                <Col xs={12} md={6} key={label}>
+                  <div className="mini-stat">
+                    <small>{label}</small>
+                    <strong>{value}</strong>
+                  </div>
                 </Col>
               ))}
             </Row>
-          </Col>
-        </Row>
-      </section>
-
-      <section className="content-band alt" id="services">
-        <div className="section-heading">
-          <div>
-            <div className="section-kicker">Services</div>
-            <Title level={2}>Logistics services built around your business.</Title>
-            <Paragraph>
-              Freight moves differently for every business. COEX combines mode,
-              routing and documentation into a single operating plan.
-            </Paragraph>
           </div>
-          <Button href="/quote" type="primary" icon={<ArrowRightOutlined />}>
-            Price a lane
-          </Button>
         </div>
-        <Row gutter={[16, 16]}>
-          {coexServices.map((service) => (
-            <Col xs={24} md={12} xl={8} key={service.title}>
-              <Card className="service-card" hoverable>
-                <div className="service-icon">{service.icon}</div>
-                <Title level={4}>{service.title}</Title>
-                <Paragraph>{service.text}</Paragraph>
-              </Card>
-            </Col>
-          ))}
-        </Row>
       </section>
 
       <section className="content-band">
-        <Row gutter={[24, 24]} align="middle">
-          <Col xs={24} lg={10}>
-            <div className="section-kicker">Global network</div>
-            <Title level={2}>Global reach. Local expertise.</Title>
+        <div className="section-heading">
+          <div>
+            <div className="section-kicker">Pricing engine</div>
+            <Title level={2}>Domestic estimates that explain the math.</Title>
             <Paragraph>
-              Connected through trusted carriers, ports, warehouses and local
-              partners across Asia, Europe, North America, the Middle East and
-              Africa.
+              The calculator applies lane distance, zone, dimensional weight,
+              service speed, carrier profile, pickup, residential delivery,
+              non-contiguous state handling, and declared value protection.
             </Paragraph>
-            <Space wrap>
-              {['Asia', 'Europe', 'North America', 'Middle East', 'Africa'].map(
-                (region) => (
-                  <Tag key={region} color="cyan">
-                    {region}
-                  </Tag>
-                ),
-              )}
-            </Space>
+          </div>
+          <Button href="/quote" icon={<ArrowRightOutlined />}>
+            Open quote tool
+          </Button>
+        </div>
+        <Row gutter={[18, 18]} align="stretch">
+          <Col xs={24} lg={13}>
+            <CoverageMap metrics={metrics} />
           </Col>
-          <Col xs={24} lg={14}>
-            <div className="network-map" aria-label="COEX Shipping network map">
-              {['Asia', 'Europe', 'North America', 'Middle East', 'Africa'].map(
-                (region, index) => (
-                  <span className={`network-dot dot-${index}`} key={region}>
-                    {region}
-                  </span>
-                ),
-              )}
-              <i className="network-route route-a" />
-              <i className="network-route route-b" />
-              <i className="network-route route-c" />
-            </div>
+          <Col xs={24} lg={11}>
+            <CarrierComparison metrics={metrics} />
           </Col>
         </Row>
       </section>
@@ -1270,13 +2425,100 @@ export function HomePage() {
       <section className="content-band alt">
         <div className="section-heading">
           <div>
-            <div className="section-kicker">Process</div>
-            <Title level={2}>A simple process, managed end to end.</Title>
+            <div className="section-kicker">US coverage</div>
+            <Title level={2}>Every state location is available.</Title>
+            <Paragraph>
+              Origin and destination selectors include all 50 states and
+              Washington, DC. Alaska and Hawaii are priced as non-contiguous
+              remote lanes.
+            </Paragraph>
+          </div>
+        </div>
+        <div className="state-grid">
+          {usLocations.map((location) => (
+            <div className="state-pill" key={location.code}>
+              <strong>{location.code}</strong>
+              <span>
+                {location.city}, {location.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="content-band">
+        <div className="section-heading">
+          <div>
+            <div className="section-kicker">Services and integrations</div>
+            <Title level={2}>
+              Built for quotes, booking, documents, and tracking.
+            </Title>
+            <Paragraph>
+              COEX details from the reference site are focused into a US
+              operating model with UPS and FedEx readiness.
+            </Paragraph>
+          </div>
+        </div>
+        <Row gutter={[16, 16]}>
+          {coexServices.map((service) => (
+            <Col xs={24} md={12} lg={8} key={service.title}>
+              <Card className="service-card">
+                <Space orientation="vertical" size={12}>
+                  <span className="service-icon">{service.icon}</span>
+                  <Title level={4}>{service.title}</Title>
+                  <Paragraph>{service.text}</Paragraph>
+                </Space>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+        <Divider />
+        <Row gutter={[16, 16]}>
+          {integrationCards.map((integration) => (
+            <Col xs={24} md={12} lg={8} key={integration.title}>
+              <Card className="integration-card">
+                <Space align="start" size={12}>
+                  <span className="service-icon">{integration.icon}</span>
+                  <div>
+                    <Text strong>{integration.title}</Text>
+                    <Paragraph>{integration.text}</Paragraph>
+                  </div>
+                </Space>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </section>
+
+      <section className="content-band alt">
+        <Row gutter={[20, 20]} align="middle">
+          <Col xs={24} lg={10}>
+            <div className="section-kicker">Live tracking console</div>
+            <Title level={2}>
+              Track COEX demos or hand off real carrier numbers.
+            </Title>
+            <Paragraph>
+              Try COEX-8143-2290, LLX-8143-2290, a UPS 1Z number, or a numeric
+              FedEx tracking number. The app detects the likely carrier and
+              provides direct tracking links.
+            </Paragraph>
+          </Col>
+          <Col xs={24} lg={14}>
+            <TrackingPanel shipment={shipment} setShipment={setShipment} />
+          </Col>
+        </Row>
+      </section>
+
+      <section className="content-band">
+        <div className="section-heading">
+          <div>
+            <div className="section-kicker">Operating flow</div>
+            <Title level={2}>From quote to proof of delivery.</Title>
           </div>
         </div>
         <Row gutter={[16, 16]}>
           {processSteps.map(([step, title, text]) => (
-            <Col xs={24} md={12} xl={6} key={step}>
+            <Col xs={24} md={12} lg={6} key={step}>
               <Card className="process-card">
                 <Text className="process-step">{step}</Text>
                 <Title level={4}>{title}</Title>
@@ -1287,79 +2529,42 @@ export function HomePage() {
         </Row>
       </section>
 
-      <section className="content-band" id="tracking">
-        <Row gutter={[24, 24]}>
-          <Col xs={24} lg={9}>
-            <div className="section-kicker">Tracking</div>
-            <Title level={2}>Know where your shipment stands.</Title>
-            <Paragraph>
-              Every COEX booking is visible in one place: confirmed milestones,
-              vessel and flight details, documents, and estimated arrival.
-            </Paragraph>
+      <section className="content-band alt">
+        <Row gutter={[18, 18]}>
+          <Col xs={24} lg={10}>
+            <div className="section-kicker">Solutions</div>
+            <Title level={2}>
+              Flexible enough for travel, retail, and freight teams.
+            </Title>
           </Col>
-          <Col xs={24} lg={15}>
-            <TrackingPanel shipment={shipment} setShipment={setShipment} />
+          <Col xs={24} lg={14}>
+            <Row gutter={[14, 14]}>
+              {coexSolutions.map((solution) => (
+                <Col xs={24} md={12} key={solution.title}>
+                  <Card className="solution-card">
+                    <Space orientation="vertical" size={12}>
+                      <span className="service-icon">{solution.icon}</span>
+                      <Title level={4}>{solution.title}</Title>
+                      <Paragraph>{solution.text}</Paragraph>
+                    </Space>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
           </Col>
         </Row>
       </section>
 
-      <section className="content-band alt" id="solutions">
+      <section className="content-band">
         <div className="section-heading">
           <div>
-            <div className="section-kicker">Industry solutions</div>
-            <Title level={2}>Not generic freight. Built around how each industry operates.</Title>
+            <div className="section-kicker">FAQ</div>
+            <Title level={2}>Clear details before checkout.</Title>
           </div>
         </div>
-        <Row gutter={[16, 16]}>
-          {coexSolutions.map((solution) => (
-            <Col xs={24} md={12} xl={6} key={solution.title}>
-              <Card className="solution-card" hoverable>
-                <div className="service-icon">{solution.icon}</div>
-                <Title level={4}>{solution.title}</Title>
-                <Paragraph>{solution.text}</Paragraph>
-              </Card>
-            </Col>
-          ))}
-        </Row>
+        <Collapse className="faq-collapse" items={faqItems} />
       </section>
-
-      <FaqAndContact />
     </ShippingFrame>
-  );
-}
-
-function FaqAndContact() {
-  return (
-    <section className="content-band" id="contact">
-      <Row gutter={[24, 24]}>
-        <Col xs={24} lg={10}>
-          <div className="section-kicker">Contact</div>
-          <Title level={2}>Ready to move your business forward?</Title>
-          <Paragraph>
-            Tell COEX what you are shipping, where it is going, and when you
-            need it there.
-          </Paragraph>
-          <Space orientation="vertical" size={12}>
-            <Button type="primary" size="large" href="/quote" icon={<DollarCircleOutlined />}>
-              Get a Shipping Quote
-            </Button>
-            <Button size="large" href="tel:+18623819018" icon={<PhoneOutlined />}>
-              Talk to Our Team
-            </Button>
-            <Button size="large" href="mailto:hello@coexshipping.com" icon={<MailOutlined />}>
-              hello@coexshipping.com
-            </Button>
-          </Space>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Collapse
-            className="faq-collapse"
-            defaultActiveKey={['work']}
-            items={faqItems}
-          />
-        </Col>
-      </Row>
-    </section>
   );
 }
 
@@ -1373,57 +2578,83 @@ export function QuotePage() {
   return (
     <ShippingFrame active="quote">
       <section className="page-hero">
-        <Row gutter={[24, 24]} align="middle">
-          <Col xs={24} lg={14}>
-            <Tag color="cyan" icon={<DollarCircleOutlined />}>
-              Shipping Quote Calculator
-            </Tag>
-            <Title>Request a shipping quote.</Title>
-            <Paragraph>
-              Choose what you are shipping, tell us where it goes, and the
-              pricing engine returns a benchmarked door-to-door rate with no
-              measuring guesswork.
-            </Paragraph>
-          </Col>
-          <Col xs={24} lg={10}>
-            <Card className="hero-summary">
-              <Statistic title="Live estimate" value={metrics.total} prefix="$" />
-              <Text type="secondary">
-                {metrics.packages || 'No'} items selected - {metrics.eta}
-              </Text>
-            </Card>
-          </Col>
-        </Row>
+        <Tag color="cyan" icon={<DollarCircleOutlined />}>
+          Domestic rate calculator
+        </Tag>
+        <Title>Price a USA shipment with carrier comparison.</Title>
+        <Paragraph>
+          Select any US origin and destination, add items, choose service speed,
+          and compare modeled UPS and FedEx totals.
+        </Paragraph>
       </section>
 
       <section className="workspace-section">
         <Row gutter={[20, 20]} align="top">
           <Col xs={24} lg={15}>
             <Space orientation="vertical" size={18} className="full-width">
-              <Card title="1. What are you shipping?" className="ant-card-premium">
+              <Card
+                title="1. Origin and destination"
+                className="ant-card-premium"
+              >
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} md={12}>
+                    <LocationSelect
+                      label="Origin state location"
+                      value={quote.originState}
+                      onChange={(originState) =>
+                        setQuote((current) => ({ ...current, originState }))
+                      }
+                    />
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <LocationSelect
+                      label="Destination state location"
+                      value={quote.destinationState}
+                      onChange={(destinationState) =>
+                        setQuote((current) => ({
+                          ...current,
+                          destinationState,
+                        }))
+                      }
+                    />
+                  </Col>
+                </Row>
+                <Alert
+                  type="success"
+                  showIcon
+                  title="USA-only service"
+                  description="All estimates are domestic United States lanes. Puerto Rico, US territories, and international shipments are intentionally excluded from this calculator."
+                />
+              </Card>
+
+              <Card title="2. Items" className="ant-card-premium">
                 <Row gutter={[12, 12]}>
                   {itemOrder.map((key) => {
-                    const item = itemDefinitions[key];
+                    const definition = itemDefinitions[key];
                     return (
                       <Col xs={24} md={12} key={key}>
                         <div className="item-row">
-                          <Space>
-                            <span className="item-icon">{item.icon}</span>
+                          <Space align="center">
+                            <span className="item-icon">{definition.icon}</span>
                             <span>
-                              <Text strong>{item.label}</Text>
-                              <Text type="secondary">{item.sublabel}</Text>
-                              <small>{item.max}</small>
+                              <Text strong>{definition.label}</Text>
+                              <small>{definition.max}</small>
                             </span>
                           </Space>
                           <Space.Compact>
                             <Button
-                              aria-label={`Remove one ${item.label}`}
+                              aria-label={`Remove ${definition.label}`}
                               icon={<MinusOutlined />}
                               onClick={() => updateCount(setQuote, key, -1)}
                             />
-                            <InputNumber min={0} max={12} value={quote.counts[key]} readOnly />
+                            <InputNumber
+                              value={quote.counts[key]}
+                              min={0}
+                              max={12}
+                              readOnly
+                            />
                             <Button
-                              aria-label={`Add one ${item.label}`}
+                              aria-label={`Add ${definition.label}`}
                               icon={<PlusOutlined />}
                               onClick={() => updateCount(setQuote, key, 1)}
                             />
@@ -1435,89 +2666,10 @@ export function QuotePage() {
                 </Row>
               </Card>
 
-              <Card title="2. Pickup location and destination" className="ant-card-premium">
-                <Row gutter={[12, 12]}>
-                  <Col xs={24} md={12}>
-                    <Form.Item label="Pickup location">
-                      <Input
-                        prefix={<EnvironmentOutlined />}
-                        value={quote.origin}
-                        onChange={(event) =>
-                          setQuote((current) => ({
-                            ...current,
-                            origin: event.target.value,
-                          }))
-                        }
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={12}>
-                    <Form.Item label="Destination">
-                      <Input
-                        prefix={<EnvironmentOutlined />}
-                        value={quote.destination}
-                        onChange={(event) =>
-                          setQuote((current) => ({
-                            ...current,
-                            destination: event.target.value,
-                          }))
-                        }
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Form.Item label="Pickup date">
-                      <Input
-                        type="date"
-                        value={quote.pickupDate}
-                        onChange={(event) =>
-                          setQuote((current) => ({
-                            ...current,
-                            pickupDate: event.target.value,
-                          }))
-                        }
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Form.Item label="Pickup window">
-                      <Select
-                        value={quote.pickupWindow}
-                        onChange={(pickupWindow) =>
-                          setQuote((current) => ({ ...current, pickupWindow }))
-                        }
-                        options={[
-                          '8:00 AM - 10:00 AM',
-                          '10:00 AM - 12:00 PM',
-                          '12:00 PM - 2:00 PM',
-                          '2:00 PM - 4:00 PM',
-                          '4:00 PM - 6:00 PM',
-                        ].map((value) => ({ value, label: value }))}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Form.Item label="Customer type">
-                      <Segmented
-                        block
-                        value={quote.customerType}
-                        onChange={(value) =>
-                          setQuote((current) => ({
-                            ...current,
-                            customerType: value as CustomerType,
-                          }))
-                        }
-                        options={[
-                          { label: 'Individual', value: 'individual' },
-                          { label: 'Business', value: 'business' },
-                        ]}
-                      />
-                    </Form.Item>
-                  </Col>
-                </Row>
-              </Card>
-
-              <Card title="3. Schedule and service" className="ant-card-premium">
+              <Card
+                title="3. Service, carrier, and options"
+                className="ant-card-premium"
+              >
                 <Space orientation="vertical" size={18} className="full-width">
                   <Radio.Group
                     className="service-radio full-width"
@@ -1538,8 +2690,42 @@ export function QuotePage() {
                       </Radio.Button>
                     ))}
                   </Radio.Group>
+
+                  <Segmented
+                    block
+                    value={quote.carrier}
+                    onChange={(value) =>
+                      setQuote((current) => ({
+                        ...current,
+                        carrier: value as CarrierKey,
+                      }))
+                    }
+                    options={[
+                      { label: 'Best rate', value: 'best' },
+                      { label: 'UPS', value: 'ups' },
+                      { label: 'FedEx', value: 'fedex' },
+                    ]}
+                  />
+
                   <Row gutter={[12, 12]}>
-                    <Col xs={24} md={12}>
+                    <Col xs={24} md={8}>
+                      <Form.Item label="Declared value">
+                        <Slider
+                          min={0}
+                          max={10000}
+                          step={50}
+                          value={quote.declaredValue}
+                          onChange={(declaredValue) =>
+                            setQuote((current) => ({
+                              ...current,
+                              declaredValue,
+                            }))
+                          }
+                        />
+                        <Text strong>{formatMoney(quote.declaredValue)}</Text>
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={8}>
                       <Checkbox
                         checked={quote.pickup}
                         onChange={(event) =>
@@ -1552,10 +2738,26 @@ export function QuotePage() {
                         Doorstep pickup
                       </Checkbox>
                       <Paragraph className="check-help">
-                        Carrier pickup window at the origin address.
+                        Adds carrier pickup handling at origin.
                       </Paragraph>
                     </Col>
-                    <Col xs={24} md={12}>
+                    <Col xs={24} md={8}>
+                      <Checkbox
+                        checked={quote.residential}
+                        onChange={(event) =>
+                          setQuote((current) => ({
+                            ...current,
+                            residential: event.target.checked,
+                          }))
+                        }
+                      >
+                        Residential delivery
+                      </Checkbox>
+                      <Paragraph className="check-help">
+                        Applies delivery-area handling.
+                      </Paragraph>
+                    </Col>
+                    <Col xs={24} md={8}>
                       <Checkbox
                         checked={quote.protection}
                         onChange={(event) =>
@@ -1565,11 +2767,60 @@ export function QuotePage() {
                           }))
                         }
                       >
-                        Add shipment protection
+                        Shipment protection
                       </Checkbox>
-                      <Paragraph className="check-help">
-                        Coverage against loss or damage in transit.
-                      </Paragraph>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Form.Item label="Pickup date">
+                        <Input
+                          type="date"
+                          value={quote.pickupDate}
+                          onChange={(event) =>
+                            setQuote((current) => ({
+                              ...current,
+                              pickupDate: event.target.value,
+                            }))
+                          }
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Form.Item label="Pickup window">
+                        <Select
+                          value={quote.pickupWindow}
+                          onChange={(pickupWindow) =>
+                            setQuote((current) => ({
+                              ...current,
+                              pickupWindow,
+                            }))
+                          }
+                          options={[
+                            '8:00 AM - 10:00 AM',
+                            '10:00 AM - 12:00 PM',
+                            '12:00 PM - 2:00 PM',
+                            '2:00 PM - 4:00 PM',
+                            '4:00 PM - 6:00 PM',
+                          ].map((value) => ({ value, label: value }))}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Form.Item label="Customer type">
+                        <Segmented
+                          block
+                          value={quote.customerType}
+                          onChange={(value) =>
+                            setQuote((current) => ({
+                              ...current,
+                              customerType: value as CustomerType,
+                            }))
+                          }
+                          options={[
+                            { label: 'Individual', value: 'individual' },
+                            { label: 'Business', value: 'business' },
+                          ]}
+                        />
+                      </Form.Item>
                     </Col>
                   </Row>
                 </Space>
@@ -1581,10 +2832,12 @@ export function QuotePage() {
             <Card className="summary-card ant-card-premium">
               <div className="section-kicker">Shipment summary</div>
               <Statistic
-                title="Estimated total"
+                title={`${carrierProfiles[metrics.selectedCarrier].name} estimated total`}
                 value={metrics.total}
                 prefix="$"
-                styles={{ content: { fontSize: 48 } }}
+                styles={{
+                  content: { fontSize: 48, color: '#132935', fontWeight: 800 },
+                }}
               />
               <Descriptions
                 column={1}
@@ -1596,9 +2849,24 @@ export function QuotePage() {
                     children: `${metrics.packages} selected`,
                   },
                   {
-                    key: 'weight',
+                    key: 'actual',
+                    label: 'Actual weight',
+                    children: `${metrics.actualWeight} lb`,
+                  },
+                  {
+                    key: 'dim',
+                    label: 'DIM weight',
+                    children: `${metrics.dimWeight} lb`,
+                  },
+                  {
+                    key: 'billable',
                     label: 'Billable weight',
                     children: `${metrics.billableWeight} lb`,
+                  },
+                  {
+                    key: 'zone',
+                    label: 'Zone',
+                    children: `Zone ${metrics.zone} / ${metrics.distanceMiles} miles`,
                   },
                   {
                     key: 'pickup',
@@ -1606,6 +2874,13 @@ export function QuotePage() {
                     children: quote.pickup
                       ? formatMoney(metrics.pickupFee)
                       : 'Drop-off selected',
+                  },
+                  {
+                    key: 'residential',
+                    label: 'Residential',
+                    children: quote.residential
+                      ? formatMoney(metrics.residentialFee)
+                      : 'Commercial selected',
                   },
                   {
                     key: 'protection',
@@ -1621,11 +2896,12 @@ export function QuotePage() {
                   },
                   {
                     key: 'date',
-                    label: 'Pickup date',
+                    label: 'Pickup',
                     children: `${quote.pickupDate} / ${quote.pickupWindow}`,
                   },
                 ]}
               />
+              <CarrierComparison metrics={metrics} />
               <Space orientation="vertical" className="full-width" size={12}>
                 <Button
                   type="primary"
@@ -1664,13 +2940,13 @@ export function TrackingPage() {
     <ShippingFrame active="tracking">
       <section className="page-hero tracking-hero">
         <Tag color="blue" icon={<SearchOutlined />}>
-          Track a Shipment
+          UPS and FedEx tracking
         </Tag>
-        <Title>Enter the tracking number from your booking confirmation.</Title>
+        <Title>Track packages with COEX, UPS, and FedEx handoff.</Title>
         <Paragraph>
-          See every milestone from pickup to final delivery. Try
-          COEX-8143-2290 for the exact freight record from the Lovable reference
-          or LLX-8143-2290 for a baggage shipment demo.
+          Enter a COEX demo number, UPS 1Z tracking number, or FedEx numeric
+          tracking number. The interface detects the carrier and provides direct
+          live carrier tracking links.
         </Paragraph>
       </section>
       <section className="workspace-section">
@@ -1719,12 +2995,13 @@ export function BookPage() {
     <ShippingFrame active="book">
       <section className="page-hero">
         <Tag color="cyan" icon={<TruckOutlined />}>
-          Book a courier pickup on COEX
+          Book a USA pickup
         </Tag>
         <Title>Pickup, lane, cargo, confirmation.</Title>
         <Paragraph>
-          A four-step booking workflow modeled from the Lovable reference and
-          expanded with estimate, protection, and contact details.
+          A four-step booking workflow modeled from the COEX reference and
+          expanded with domestic estimate, carrier comparison, protection, and
+          contact details.
         </Paragraph>
       </section>
 
@@ -1734,9 +3011,14 @@ export function BookPage() {
             <Card className="ant-card-premium sticky-panel">
               <Steps current={step} orientation="vertical" items={stepItems} />
               <Divider />
-              <Statistic title="Live estimate" value={metrics.total} prefix="$" />
+              <Statistic
+                title="Live estimate"
+                value={metrics.total}
+                prefix="$"
+              />
               <Text type="secondary">
-                {metrics.packages} items - {speedDefinitions[quote.speed].label}
+                {metrics.packages} items -{' '}
+                {carrierProfiles[metrics.selectedCarrier].name}
               </Text>
             </Card>
           </Col>
@@ -1746,7 +3028,7 @@ export function BookPage() {
                 <Result
                   status="success"
                   title="Demo booking created"
-                  subTitle="Confirmation COEX-DEMO-2609 is ready with digital label, documents, and tracking staged locally."
+                  subTitle="Confirmation COEX-DEMO-2609 is ready with digital label, documents, carrier handoff, and tracking staged locally."
                   extra={[
                     <Button type="primary" href="/tracking" key="track">
                       Track booking
@@ -1829,7 +3111,11 @@ export function BookPage() {
                   ) : null}
 
                   {step === 3 ? (
-                    <Space orientation="vertical" className="full-width" size={16}>
+                    <Space
+                      orientation="vertical"
+                      className="full-width"
+                      size={16}
+                    >
                       <Row gutter={[12, 12]}>
                         {[
                           ['contactName', 'Contact name'],
@@ -1856,7 +3142,7 @@ export function BookPage() {
                         type="info"
                         showIcon
                         title="Booking preview"
-                        description={`Pickup from ${booking.pickupAddress}, ${booking.pickupCity} to ${booking.destinationAddress}, ${booking.destinationCity}. Estimated ${formatMoney(metrics.total)} with ${metrics.service} service.`}
+                        description={`Pickup from ${booking.pickupAddress}, ${booking.pickupCity}, ${booking.pickupState} to ${booking.destinationAddress}, ${booking.destinationCity}, ${booking.destinationState}. Estimated ${formatMoney(metrics.total)} with ${metrics.service}.`}
                       />
                     </Space>
                   ) : null}
@@ -1864,7 +3150,9 @@ export function BookPage() {
                   <div className="wizard-actions">
                     <Button
                       disabled={step === 0}
-                      onClick={() => setStep((current) => Math.max(0, current - 1))}
+                      onClick={() =>
+                        setStep((current) => Math.max(0, current - 1))
+                      }
                     >
                       Back
                     </Button>
@@ -1964,13 +3252,15 @@ export function LoginPage() {
         <Row gutter={[28, 28]} align="middle">
           <Col xs={24} lg={12}>
             <Tag color="cyan" icon={<UserOutlined />}>
-              Sign in to CO-EX
+              Sign in to COEX
             </Tag>
-            <Title>Book pickups, manage your wallet, and track every parcel.</Title>
+            <Title>
+              Book pickups, manage saved quotes, and track every parcel.
+            </Title>
             <Paragraph>
-              The account hub mirrors the Lovable reference sign-in flow:
-              sign in, create account, forgot password, and continue as guest.
-              This demo does not transmit credentials.
+              The account hub mirrors the reference sign-in flow: sign in,
+              create account, forgot password, and continue as guest. This demo
+              does not transmit credentials.
             </Paragraph>
             <Row gutter={[12, 12]}>
               {[
@@ -1980,7 +3270,11 @@ export function LoginPage() {
               ].map(([title, value, icon]) => (
                 <Col xs={24} sm={8} key={title as string}>
                   <Card className="metric-card">
-                    <Statistic title={title as string} value={value as number} prefix={icon} />
+                    <Statistic
+                      title={title as string}
+                      value={value as number}
+                      prefix={icon}
+                    />
                   </Card>
                 </Col>
               ))}
@@ -1998,12 +3292,19 @@ export function LoginPage() {
                 block
                 size="large"
                 icon={<QrcodeOutlined />}
-                onClick={() => setMessage('Guest checkout enabled for this visit.')}
+                onClick={() =>
+                  setMessage('Guest checkout enabled for this visit.')
+                }
               >
                 Continue as guest
               </Button>
               {message ? (
-                <Alert className="login-alert" type="success" showIcon title={message} />
+                <Alert
+                  className="login-alert"
+                  type="success"
+                  showIcon
+                  title={message}
+                />
               ) : null}
             </Card>
           </Col>

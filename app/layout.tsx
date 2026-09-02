@@ -15,22 +15,22 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'COEX Shipping - Global Freight, Quote & Tracking Platform',
+    default: 'COEX Shipping - USA Parcel Quote & Tracking Platform',
     template: '%s | COEX Shipping',
   },
   description:
-    'A premium Ant Design shipping platform for COEX global freight, quote calculation, courier booking, documents, and milestone tracking.',
+    'A premium Ant Design shipping platform for USA-only parcel, luggage, quote calculation, UPS and FedEx tracking handoff, booking, documents, and milestone visibility.',
   openGraph: {
-    title: 'COEX Shipping - Global Freight, Quote & Tracking Platform',
+    title: 'COEX Shipping - USA Parcel Quote & Tracking Platform',
     description:
-      'Reliable ocean, air and inland logistics with quote, booking, documents, and shipment visibility in one polished shipping experience.',
+      'Domestic USA shipping with state-by-state estimates, UPS and FedEx carrier handoff, booking, documents, and shipment visibility in one polished experience.',
     images: ['/hero-logistics.png'],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'COEX Shipping - Global Freight, Quote & Tracking Platform',
+    title: 'COEX Shipping - USA Parcel Quote & Tracking Platform',
     description:
-      'A premium shipping platform for global freight, baggage, booking, and tracking.',
+      'A premium USA shipping platform for luggage, parcels, carrier estimates, booking, and tracking.',
     images: ['/hero-logistics.png'],
   },
 };

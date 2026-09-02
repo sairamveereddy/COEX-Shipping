@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">COEX Shipping logo</title>
+  <desc id="desc">A teal shield with a gold delivery route and a white delivery truck.</desc>
+  <defs>
+    <linearGradient id="mark" x1="22" y1="16" x2="106" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F8F93"/>
+      <stop offset="0.58" stop-color="#0A6778"/>
+      <stop offset="1" stop-color="#132935"/>
+    </linearGradient>
+    <linearGradient id="road" x1="30" y1="80" x2="100" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2C94C"/>
+      <stop offset="1" stop-color="#F2994A"/>
+    </linearGradient>
+    <filter id="shadow" x="14" y="12" width="100" height="104" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#132935" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <path fill="url(#mark)" d="M64 10 104 24v35c0 26.3-15.8 49.8-40 59-24.2-9.2-40-32.7-40-59V24l40-14Z" filter="url(#shadow)"/>
+  <path fill="none" stroke="url(#road)" stroke-linecap="round" stroke-width="8" d="M34 80c13-23 28-34 45-34h17"/>
+  <path fill="#fff" d="M39 67h29c3.2 0 5.8 2.6 5.8 5.8V83H34.5V71.5c0-2.5 2-4.5 4.5-4.5Z"/>
+  <path fill="#fff" d="M73.5 73H89l8.5 10H73.5V73Z"/>
+  <circle cx="47" cy="86" r="7" fill="#132935"/>
+  <circle cx="84" cy="86" r="7" fill="#132935"/>
+  <circle cx="47" cy="86" r="3" fill="#fff"/>
+  <circle cx="84" cy="86" r="3" fill="#fff"/>
+  <path fill="#EAFBFA" d="M43 34h11v18H43V34Zm16 0h10c9.5 0 15.5 6.2 15.5 15 0 9-6.2 15-15.7 15H59V34Zm10 20.2c3.8 0 6.1-2 6.1-5.2S72.8 43.8 69 43.8h-.8v10.4h.8Z" opacity="0.94"/>
+</svg>

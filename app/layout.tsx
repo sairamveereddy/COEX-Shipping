@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   },
   description:
     'A premium Ant Design shipping platform for USA-only parcel, luggage, quote calculation, UPS and FedEx tracking handoff, booking, documents, and milestone visibility.',
+  icons: {
+    icon: '/coex-logo.svg',
+  },
   openGraph: {
     title: 'COEX Shipping - USA Parcel Quote & Tracking Platform',
     description:

@@ -166,6 +166,13 @@ body {
   font-size: 21px;
 }
 
+.ship-logo-image,
+.ship-footer-logo {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  filter: drop-shadow(0 8px 14px rgba(19, 41, 53, 0.16));
+}
+
 .ship-menu {
   min-width: 0;
   border-bottom: 0 !important;
@@ -174,6 +181,97 @@ body {
 
 .ship-header-actions {
   min-width: max-content;
+}
+
+.truck-animation-rail {
+  position: sticky;
+  top: 72px;
+  z-index: 35;
+  height: 34px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(15, 143, 147, 0.12);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0),
+      #ffffff 12%,
+      #ffffff 88%,
+      rgba(255, 255, 255, 0)
+    ),
+    rgba(245, 251, 250, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+.truck-animation-track {
+  position: relative;
+  width: min(1240px, calc(100vw - 28px));
+  height: 34px;
+  margin: 0 auto;
+}
+
+.truck-animation-track::before {
+  position: absolute;
+  top: 16px;
+  right: 6px;
+  left: 6px;
+  height: 2px;
+  content: '';
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(15, 143, 147, 0.52) 0 18px,
+    transparent 18px 28px
+  );
+}
+
+.rail-hub {
+  position: absolute;
+  top: 11px;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #e0a11a;
+  box-shadow: 0 4px 10px rgba(21, 41, 53, 0.18);
+}
+
+.hub-left {
+  left: 8%;
+}
+
+.hub-mid {
+  left: 50%;
+}
+
+.hub-right {
+  right: 8%;
+}
+
+.rail-truck {
+  position: absolute;
+  top: 4px;
+  left: -44px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 26px;
+  border: 1px solid rgba(15, 143, 147, 0.24);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f8f93;
+  box-shadow: 0 10px 24px rgba(21, 41, 53, 0.16);
+  animation: rail-truck-drive 13s linear infinite;
+}
+
+@keyframes rail-truck-drive {
+  from {
+    left: -44px;
+  }
+
+  to {
+    left: calc(100% + 44px);
+  }
 }
 
 .hero-section,
@@ -201,6 +299,49 @@ body {
     rgba(232, 250, 249, 0.94) 52%,
     rgba(255, 255, 255, 0.96)
   );
+}
+
+.page-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-hero::after {
+  position: absolute;
+  right: max(18px, calc((100vw - 1240px) / 2));
+  bottom: 28px;
+  width: min(440px, 40vw);
+  height: 128px;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 20px,
+      rgba(15, 143, 147, 0.16) 20px 22px,
+      transparent 22px 48px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 44px,
+      rgba(224, 161, 26, 0.26) 44px 47px,
+      transparent 47px 100%
+    );
+  background-size:
+    48px 100%,
+    100% 100%;
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    black 20%,
+    black 80%,
+    transparent
+  );
+}
+
+.page-hero > * {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-title.ant-typography {
@@ -235,6 +376,62 @@ body {
 
 .ship-metrics {
   width: min(700px, 100%);
+}
+
+.hero-stat-strip {
+  display: grid;
+  width: min(820px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hero-stat-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 82px;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 13px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 143, 147, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.94),
+      rgba(242, 251, 249, 0.94)
+    ),
+    #fff;
+  box-shadow: 0 14px 34px rgba(21, 41, 53, 0.07);
+}
+
+.hero-stat-item span {
+  display: grid;
+  grid-row: 1 / 3;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: #132935;
+  color: white;
+  font-size: 17px;
+}
+
+.hero-stat-item small {
+  color: #60727a;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.hero-stat-item strong {
+  min-width: 0;
+  color: #132935;
+  font-size: 14px;
+  line-height: 1.22;
 }
 
 .metric-card {
@@ -273,6 +470,14 @@ body {
   box-shadow: 0 20px 54px rgba(21, 41, 53, 0.09);
 }
 
+.ant-card-premium:hover,
+.service-card:hover,
+.solution-card:hover,
+.integration-card:hover {
+  border-color: rgba(15, 143, 147, 0.34) !important;
+  box-shadow: 0 24px 62px rgba(21, 41, 53, 0.12);
+}
+
 .full-width {
   width: 100%;
 }
@@ -287,7 +492,8 @@ body {
 
 .quote-card .ant-typography,
 .carrier-rate-card .ant-typography,
-.integration-card .ant-typography {
+.integration-card .ant-typography,
+.rate-intelligence .ant-typography {
   margin: 0;
 }
 
@@ -367,6 +573,48 @@ body {
   padding: 18px;
   border-radius: 8px;
   background: #f3faf7;
+}
+
+.rate-intelligence {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15, 143, 147, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(233, 248, 246, 0.72),
+      rgba(255, 247, 222, 0.62)
+    ),
+    #fff;
+}
+
+.rate-intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rate-intelligence-grid span {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.rate-intelligence-grid small {
+  color: #61747d;
+  font-size: 11px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.rate-intelligence-grid b {
+  color: #132935;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
 .visual-band {
@@ -511,6 +759,22 @@ body {
     52px 52px,
     52px 52px,
     auto;
+}
+
+.coverage-map::after {
+  position: absolute;
+  top: 50%;
+  right: 10%;
+  left: 10%;
+  height: 1px;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(19, 41, 53, 0.12),
+    transparent
+  );
+  transform: rotate(-9deg);
 }
 
 .coverage-map::before {
@@ -748,6 +1012,31 @@ body {
   top: 96px;
 }
 
+.booking-preview-lane {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(15, 143, 147, 0.14);
+  border-radius: 8px;
+  background: #f3faf7;
+  color: #132935;
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.booking-preview-lane svg {
+  color: #0f8f93;
+}
+
+.booking-preview-lane i {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0f8f93, #e0a11a);
+}
+
 .wizard-actions {
   display: flex;
   justify-content: space-between;
@@ -814,6 +1103,10 @@ body {
     padding-bottom: 10px;
   }
 
+  .truck-animation-rail {
+    top: 124px;
+  }
+
   .ship-menu {
     grid-column: 1 / -1;
     order: 3;
@@ -844,6 +1137,11 @@ body {
   .sticky-panel {
     position: static;
   }
+
+  .hero-stat-strip,
+  .rate-intelligence-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 620px) {
@@ -865,6 +1163,10 @@ body {
 
   .service-radio {
     grid-template-columns: 1fr;
+  }
+
+  .truck-animation-rail {
+    top: 132px;
   }
 
   .visual-overlay {
@@ -898,5 +1200,12 @@ body {
 
   .map-data-card {
     max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-truck {
+    left: 50%;
+    animation: none;
   }
 }

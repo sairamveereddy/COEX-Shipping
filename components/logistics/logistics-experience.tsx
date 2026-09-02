@@ -1749,6 +1749,39 @@ function useWebMcpTools({
   }, [quote, setQuote, setShipment]);
 }
 
+function TruckAnimationRail() {
+  return (
+    <div className="truck-animation-rail" aria-hidden="true">
+      <div className="truck-animation-track">
+        <span className="rail-hub hub-left" />
+        <span className="rail-hub hub-mid" />
+        <span className="rail-hub hub-right" />
+        <span className="rail-truck">
+          <TruckOutlined />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HeroStatStrip({
+  items,
+}: {
+  items: Array<{ icon: ReactNode; label: string; value: string }>;
+}) {
+  return (
+    <div className="hero-stat-strip">
+      {items.map((item) => (
+        <div className="hero-stat-item" key={item.label}>
+          <span>{item.icon}</span>
+          <small>{item.label}</small>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ShippingFrame({
   active,
   children,
@@ -1783,9 +1816,13 @@ function ShippingFrame({
       <Layout className="ship-app-shell">
         <Header className="ship-header">
           <Link className="ship-logo" href="/" aria-label="COEX Shipping home">
-            <span className="ship-logo-mark">
-              <TruckOutlined />
-            </span>
+            <Image
+              src="/coex-logo.svg"
+              alt=""
+              width={46}
+              height={46}
+              className="ship-logo-image"
+            />
             <span>
               <strong>COEX Shipping</strong>
               <small>USA Connect Express</small>
@@ -1822,14 +1859,19 @@ function ShippingFrame({
             </Button>
           </Space>
         </Header>
+        <TruckAnimationRail />
         <Content>{children}</Content>
         <Footer className="ship-footer">
           <Row gutter={[24, 24]}>
             <Col xs={24} md={10}>
               <Space align="start" size={12}>
-                <span className="ship-footer-mark">
-                  <TruckOutlined />
-                </span>
+                <Image
+                  src="/coex-logo.svg"
+                  alt=""
+                  width={54}
+                  height={54}
+                  className="ship-footer-logo"
+                />
                 <div>
                   <Title level={4}>COEX Shipping</Title>
                   <Paragraph>
@@ -2332,6 +2374,25 @@ export function HomePage() {
                 FedEx tracking handoff, booking, documents, and shipment
                 visibility.
               </Paragraph>
+              <HeroStatStrip
+                items={[
+                  {
+                    icon: <EnvironmentOutlined />,
+                    label: 'Current lane',
+                    value: `${formatLocation(quote.originState)} to ${formatLocation(quote.destinationState)}`,
+                  },
+                  {
+                    icon: <TruckOutlined />,
+                    label: 'Best carrier',
+                    value: carrierProfiles[metrics.selectedCarrier].name,
+                  },
+                  {
+                    icon: <DollarCircleOutlined />,
+                    label: 'Estimated total',
+                    value: formatMoney(metrics.total),
+                  },
+                ]}
+              />
               <Row gutter={[12, 12]} className="ship-metrics">
                 {coverageMetrics.map(([value, label]) => (
                   <Col xs={12} md={6} key={label}>
@@ -2586,6 +2647,25 @@ export function QuotePage() {
           Select any US origin and destination, add items, choose service speed,
           and compare modeled UPS and FedEx totals.
         </Paragraph>
+        <HeroStatStrip
+          items={[
+            {
+              icon: <EnvironmentOutlined />,
+              label: 'Coverage',
+              value: '50 states + DC',
+            },
+            {
+              icon: <DollarCircleOutlined />,
+              label: 'Rate model',
+              value: 'Zone + DIM',
+            },
+            {
+              icon: <TruckOutlined />,
+              label: 'Carriers',
+              value: 'UPS + FedEx',
+            },
+          ]}
+        />
       </section>
 
       <section className="workspace-section">
@@ -2901,6 +2981,23 @@ export function QuotePage() {
                   },
                 ]}
               />
+              <div className="rate-intelligence">
+                <Text strong>Lane intelligence</Text>
+                <div className="rate-intelligence-grid">
+                  <span>
+                    <small>Route</small>
+                    <b>{metrics.routeLabel}</b>
+                  </span>
+                  <span>
+                    <small>Transit</small>
+                    <b>{metrics.rates[metrics.selectedCarrier].transit}</b>
+                  </span>
+                  <span>
+                    <small>Non-contiguous fee</small>
+                    <b>{formatMoney(Math.max(0, metrics.remoteFee))}</b>
+                  </span>
+                </div>
+              </div>
               <CarrierComparison metrics={metrics} />
               <Space orientation="vertical" className="full-width" size={12}>
                 <Button
@@ -2948,6 +3045,25 @@ export function TrackingPage() {
           tracking number. The interface detects the carrier and provides direct
           live carrier tracking links.
         </Paragraph>
+        <HeroStatStrip
+          items={[
+            {
+              icon: <SearchOutlined />,
+              label: 'Detection',
+              value: 'Auto / UPS / FedEx',
+            },
+            {
+              icon: <LinkOutlined />,
+              label: 'Handoff',
+              value: 'Carrier links',
+            },
+            {
+              icon: <FileDoneOutlined />,
+              label: 'Records',
+              value: 'Docs + milestones',
+            },
+          ]}
+        />
       </section>
       <section className="workspace-section">
         <TrackingPanel shipment={shipment} setShipment={setShipment} />
@@ -3003,6 +3119,25 @@ export function BookPage() {
           expanded with domestic estimate, carrier comparison, protection, and
           contact details.
         </Paragraph>
+        <HeroStatStrip
+          items={[
+            {
+              icon: <EnvironmentOutlined />,
+              label: 'Lane',
+              value: metrics.routeLabel,
+            },
+            {
+              icon: <DollarCircleOutlined />,
+              label: 'Estimate',
+              value: formatMoney(metrics.total),
+            },
+            {
+              icon: <FileDoneOutlined />,
+              label: 'Checkout',
+              value: '4 steps',
+            },
+          ]}
+        />
       </section>
 
       <section className="workspace-section">
@@ -3020,6 +3155,12 @@ export function BookPage() {
                 {metrics.packages} items -{' '}
                 {carrierProfiles[metrics.selectedCarrier].name}
               </Text>
+              <div className="booking-preview-lane">
+                <TruckOutlined />
+                <span>{formatLocation(quote.originState)}</span>
+                <i />
+                <span>{formatLocation(quote.destinationState)}</span>
+              </div>
             </Card>
           </Col>
           <Col xs={24} lg={16}>
@@ -3262,6 +3403,25 @@ export function LoginPage() {
               create account, forgot password, and continue as guest. This demo
               does not transmit credentials.
             </Paragraph>
+            <HeroStatStrip
+              items={[
+                {
+                  icon: <DollarCircleOutlined />,
+                  label: 'Saved quotes',
+                  value: '4 active',
+                },
+                {
+                  icon: <TruckOutlined />,
+                  label: 'Open shipments',
+                  value: '2 moving',
+                },
+                {
+                  icon: <SafetyCertificateOutlined />,
+                  label: 'Security',
+                  value: 'Local demo',
+                },
+              ]}
+            />
             <Row gutter={[12, 12]}>
               {[
                 ['Saved quotes', 4, <DollarCircleOutlined key="saved" />],

@@ -1,7 +1,7 @@
 'use client';
 
+import ArrowRightOutlined from '@ant-design/icons/ArrowRightOutlined';
 import {
-  ArrowRightOutlined,
   BankOutlined,
   CheckCircleFilled,
   ClusterOutlined,

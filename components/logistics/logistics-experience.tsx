@@ -10,7 +10,6 @@ import {
   DollarCircleOutlined,
   EnvironmentOutlined,
   FileDoneOutlined,
-  GlobalOutlined,
   InboxOutlined,
   LinkOutlined,
   LoginOutlined,
@@ -30,8 +29,8 @@ import {
 } from '@ant-design/icons';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -109,6 +108,26 @@ type BookingState = {
   contactEmail: string;
   phone: string;
   notes: string;
+};
+
+type QuoteContactState = {
+  shipperName: string;
+  shipperEmail: string;
+  shipperPhone: string;
+  pickupStreet: string;
+  pickupUnit: string;
+  pickupCity: string;
+  pickupState: string;
+  pickupZip: string;
+  recipientName: string;
+  recipientEmail: string;
+  recipientPhone: string;
+  deliveryStreet: string;
+  deliveryUnit: string;
+  deliveryCity: string;
+  deliveryState: string;
+  deliveryZip: string;
+  deliveryInstructions: string;
 };
 
 type USLocation = {
@@ -195,6 +214,13 @@ type Shipment = {
     detail: string;
     done: boolean;
   }>;
+};
+
+type NormalizedTrackingInput = {
+  raw: string;
+  trackingNumber: string;
+  carrier: TrackingCarrier;
+  isCarrierPage: boolean;
 };
 
 type WebMcpTool = {
@@ -728,6 +754,26 @@ const initialBooking: BookingState = {
   notes: 'Hold for destination contact if delivery desk is closed.',
 };
 
+const initialQuoteContact: QuoteContactState = {
+  shipperName: 'Guest shipper',
+  shipperEmail: 'shipper@example.com',
+  shipperPhone: '(862) 381-9018',
+  pickupStreet: '418 W 12th St',
+  pickupUnit: 'Suite 200',
+  pickupCity: 'Dallas',
+  pickupState: 'TX',
+  pickupZip: '75201',
+  recipientName: 'Destination contact',
+  recipientEmail: 'receiver@example.com',
+  recipientPhone: '(310) 555-0199',
+  deliveryStreet: '1 World Way',
+  deliveryUnit: 'Terminal delivery desk',
+  deliveryCity: 'Los Angeles',
+  deliveryState: 'CA',
+  deliveryZip: '90045',
+  deliveryInstructions: 'Call the destination contact before final delivery.',
+};
+
 const itemOrder: ItemKey[] = [
   'carryOn',
   'checked',
@@ -868,6 +914,11 @@ const speedDefinitions: Record<
   },
 };
 
+const carrierTrackingPages: Record<CarrierProvider, string> = {
+  ups: 'https://www.ups.com/track?loc=en_US',
+  fedex: 'https://www.fedex.com/en-us/tracking.html',
+};
+
 const carrierProfiles: Record<
   CarrierProvider,
   {
@@ -906,7 +957,9 @@ const carrierProfiles: Record<
       sameDay: 'UPS Express Critical style estimate',
     },
     trackingUrl: (trackingNumber) =>
-      `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(trackingNumber)}`,
+      trackingNumber
+        ? `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(trackingNumber)}`
+        : carrierTrackingPages.ups,
   },
   fedex: {
     name: 'FedEx',
@@ -931,7 +984,9 @@ const carrierProfiles: Record<
       sameDay: 'FedEx SameDay style estimate',
     },
     trackingUrl: (trackingNumber) =>
-      `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`,
+      trackingNumber
+        ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}`
+        : carrierTrackingPages.fedex,
   },
 };
 
@@ -1408,6 +1463,59 @@ function locationSelectOptions() {
   }));
 }
 
+function getCarrierName(carrier: TrackingCarrier) {
+  if (carrier === 'ups') return 'UPS';
+  if (carrier === 'fedex') return 'FedEx';
+  return 'carrier';
+}
+
+function getCityImage(location: USLocation, index: number) {
+  const seed = encodeURIComponent(location.city.toLowerCase().replace(/\s+/g, '-'));
+  return `https://picsum.photos/seed/${seed}/180/255`;
+}
+
+function getRequiredQuoteContactFields(contact: QuoteContactState) {
+  return [
+    contact.shipperName,
+    contact.shipperEmail,
+    contact.shipperPhone,
+    contact.pickupStreet,
+    contact.pickupCity,
+    contact.pickupState,
+    contact.pickupZip,
+    contact.recipientName,
+    contact.recipientEmail,
+    contact.recipientPhone,
+    contact.deliveryStreet,
+    contact.deliveryCity,
+    contact.deliveryState,
+    contact.deliveryZip,
+  ];
+}
+
+function isQuoteContactComplete(contact: QuoteContactState) {
+  return getRequiredQuoteContactFields(contact).every(
+    (value) => value.trim().length > 0,
+  );
+}
+
+function formatAddressLine({
+  street,
+  unit,
+  city,
+  state,
+  zip,
+}: {
+  street: string;
+  unit: string;
+  city: string;
+  state: string;
+  zip: string;
+}) {
+  const unitText = unit.trim() ? `, ${unit.trim()}` : '';
+  return `${street.trim()}${unitText}, ${city.trim()}, ${state} ${zip.trim()}`;
+}
+
 function detectCarrier(trackingNumber: string): TrackingCarrier {
   const trimmed = trackingNumber.trim().toUpperCase();
   const digitsOnly = trimmed.replace(/\D/g, '');
@@ -1423,11 +1531,92 @@ function detectCarrier(trackingNumber: string): TrackingCarrier {
   return 'auto';
 }
 
+function getTrackingNumberFromUrl(url: URL) {
+  const parameterNames = [
+    'tracknum',
+    'tracknums',
+    'trackNums',
+    'trackingNumber',
+    'trackingnumber',
+    'trknbr',
+    'trknum',
+    'tracknumbers',
+  ];
+
+  for (const parameter of parameterNames) {
+    const value = url.searchParams.get(parameter);
+    if (value?.trim()) {
+      return value.split(',')[0].trim();
+    }
+  }
+
+  return (
+    url.href.match(/1Z[0-9A-Z]{16}/i)?.[0] ??
+    url.href.match(/\b\d{12,22}\b/)?.[0] ??
+    ''
+  );
+}
+
+function normalizeTrackingInput(
+  input: string,
+  preferredCarrier: TrackingCarrier,
+): NormalizedTrackingInput {
+  const raw = input.trim();
+  let trackingNumber = raw.toUpperCase();
+  let carrierFromUrl: TrackingCarrier = 'auto';
+  let isCarrierPage = false;
+
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+
+    if (host.includes('ups.com')) {
+      carrierFromUrl = 'ups';
+    }
+
+    if (host.includes('fedex.com')) {
+      carrierFromUrl = 'fedex';
+    }
+
+    if (carrierFromUrl !== 'auto') {
+      trackingNumber = getTrackingNumberFromUrl(url).toUpperCase();
+      isCarrierPage = !trackingNumber;
+    }
+  } catch {
+    // Plain tracking numbers are handled by the pattern detector below.
+  }
+
+  const detectedCarrier = detectCarrier(trackingNumber);
+  const carrier =
+    preferredCarrier !== 'auto'
+      ? preferredCarrier
+      : carrierFromUrl !== 'auto'
+        ? carrierFromUrl
+        : detectedCarrier;
+
+  return {
+    raw,
+    trackingNumber,
+    carrier,
+    isCarrierPage,
+  };
+}
+
 function getTrackingLinks(
   trackingNumber: string,
   carrier: TrackingCarrier,
 ): Shipment['trackingLinks'] {
   const clean = trackingNumber.trim();
+  if (!clean && (carrier === 'ups' || carrier === 'fedex')) {
+    return [
+      {
+        carrier,
+        label: `Open ${getCarrierName(carrier)} tracking page`,
+        url: carrierTrackingPages[carrier],
+      },
+    ];
+  }
+
   if (!clean) return [];
 
   if (carrier === 'ups') {
@@ -1471,35 +1660,49 @@ function createFallbackShipment(
   const carrier =
     selectedCarrier === 'auto' ? detectCarrier(number) : selectedCarrier;
   const links = getTrackingLinks(number, carrier);
-  const carrierName =
-    carrier === 'ups' ? 'UPS' : carrier === 'fedex' ? 'FedEx' : 'carrier';
+  const hasTrackingNumber = number.trim().length > 0;
+  const carrierName = getCarrierName(carrier);
+  const displayNumber = hasTrackingNumber
+    ? number
+    : `${carrierName.toUpperCase()} TRACKING PAGE`;
 
   return {
-    number: number || 'COEX-GUEST-2048',
+    number: displayNumber || 'COEX-GUEST-2048',
     carrier,
-    status: links.length ? 'CARRIER LOOKUP READY' : 'LABEL CREATED',
-    progress: links.length ? 18 : 22,
-    origin: 'USA origin pending',
-    destination: 'USA destination pending',
-    mode: `${carrierName} tracking handoff`,
-    eta: links.length ? 'Open carrier page for live ETA' : 'Pending first scan',
-    pieces: '1 shipment',
-    documents: ['Digital label pending first carrier scan'],
+    status: hasTrackingNumber ? 'CARRIER LOOKUP READY' : 'CARRIER PAGE READY',
+    progress: hasTrackingNumber ? 18 : 8,
+    origin: hasTrackingNumber ? 'Carrier origin pending' : `${carrierName} site`,
+    destination: hasTrackingNumber
+      ? 'Carrier destination pending'
+      : 'Enter tracking number on carrier page',
+    mode: hasTrackingNumber
+      ? `${carrierName} tracking handoff`
+      : `${carrierName} public tracking page`,
+    eta: hasTrackingNumber
+      ? 'Open carrier page for live ETA'
+      : 'Enter tracking number on carrier page',
+    pieces: hasTrackingNumber ? '1 shipment' : 'Carrier page handoff',
+    documents: hasTrackingNumber
+      ? ['Digital label pending first carrier scan']
+      : ['Official carrier tracking page'],
     trackingLinks: links,
-    exception: links.length
-      ? 'Open the carrier tracking page for live scans. API credentials can replace this handoff with embedded live status.'
-      : undefined,
+    exception:
+      'Embedded UPS/FedEx scan data requires official carrier API credentials on the server. Direct carrier tracking is ready now.',
     milestones: [
       {
-        title: 'Tracking number received',
-        detail: 'Entered in COEX tracker',
+        title: hasTrackingNumber
+          ? 'Tracking number received'
+          : 'Carrier page selected',
+        detail: hasTrackingNumber
+          ? 'Entered in COEX tracker'
+          : `Ready to open ${carrierName}`,
         done: true,
       },
       {
         title: `${carrierName} handoff prepared`,
-        detail: links.length
+        detail: hasTrackingNumber
           ? 'Carrier tracking link is ready'
-          : 'Waiting for a carrier number',
+          : 'Carrier tracking form is ready',
         done: links.length > 0,
       },
       {
@@ -1719,14 +1922,18 @@ function useWebMcpTools({
           throw new Error('trackingNumber is required');
         }
 
-        const requested = value.trackingNumber.trim().toUpperCase();
-        const carrier =
+        const preferredCarrier =
           value.carrier === 'ups' || value.carrier === 'fedex'
             ? value.carrier
             : 'auto';
+        const normalized = normalizeTrackingInput(
+          value.trackingNumber,
+          preferredCarrier,
+        );
+        const requested = normalized.trackingNumber;
         const shipment =
           sampleShipments.find((item) => item.number === requested) ??
-          createFallbackShipment(requested, carrier);
+          createFallbackShipment(requested, normalized.carrier);
         setShipment(shipment);
 
         return {
@@ -1764,6 +1971,29 @@ function TruckAnimationRail() {
   );
 }
 
+function DesktopSideDesign() {
+  return (
+    <>
+      <div className="desktop-side-design left" aria-hidden="true">
+        <span className="side-label">COEX</span>
+        <span className="side-node primary" />
+        <span className="side-path" />
+        <span className="side-chip">50 states</span>
+        <span className="side-chip accent">Zone 2-8</span>
+        <span className="side-node small" />
+      </div>
+      <div className="desktop-side-design right" aria-hidden="true">
+        <span className="side-label">Live lane</span>
+        <span className="side-node primary" />
+        <span className="side-path" />
+        <span className="side-chip">UPS</span>
+        <span className="side-chip accent">FedEx</span>
+        <span className="side-node small" />
+      </div>
+    </>
+  );
+}
+
 function HeroStatStrip({
   items,
 }: {
@@ -1778,6 +2008,291 @@ function HeroStatStrip({
           <strong>{item.value}</strong>
         </div>
       ))}
+    </div>
+  );
+}
+
+const heroCardWidth = 60;
+const heroCardHeight = 85;
+const heroMaxScroll = 3000;
+
+function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
+  const [introPhase, setIntroPhase] = useState<'scatter' | 'line' | 'circle'>(
+    'scatter',
+  );
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [smoothScroll, setSmoothScroll] = useState(0);
+  const [smoothMouseX, setSmoothMouseX] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef(0);
+  const scrollTargetRef = useRef(0);
+  const mouseTargetRef = useRef(0);
+
+  const scatterPositions = useMemo(
+    () =>
+      usLocations.map((_, index) => ({
+        x: Math.sin(index * 23.71) * 780 + Math.cos(index * 5.13) * 120,
+        y: Math.cos(index * 17.33) * 450 + Math.sin(index * 3.91) * 90,
+        rotation: Math.sin(index * 11.42) * 90,
+        scale: 0.6,
+        opacity: 0,
+      })),
+    [],
+  );
+
+  useEffect(() => {
+    const timer1 = window.setTimeout(() => setIntroPhase('line'), 500);
+    const timer2 = window.setTimeout(() => setIntroPhase('circle'), 2500);
+
+    return () => {
+      window.clearTimeout(timer1);
+      window.clearTimeout(timer2);
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const updateSize = () => {
+      setContainerSize({
+        width: container.offsetWidth,
+        height: container.offsetHeight,
+      });
+    };
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setContainerSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+
+    updateSize();
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    let touchStartY = 0;
+    const setVirtualScroll = (deltaY: number) => {
+      const next = Math.min(
+        Math.max(scrollRef.current + deltaY, 0),
+        heroMaxScroll,
+      );
+      scrollRef.current = next;
+      scrollTargetRef.current = next;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      const isAtStart = scrollRef.current === 0 && event.deltaY < 0;
+      const isAtEnd = scrollRef.current === heroMaxScroll && event.deltaY > 0;
+      if (!isAtStart && !isAtEnd) {
+        event.preventDefault();
+        setVirtualScroll(event.deltaY);
+      }
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const touchY = event.touches[0]?.clientY ?? touchStartY;
+      const deltaY = touchStartY - touchY;
+      const isAtStart = scrollRef.current === 0 && deltaY < 0;
+      const isAtEnd = scrollRef.current === heroMaxScroll && deltaY > 0;
+      if (!isAtStart && !isAtEnd) {
+        event.preventDefault();
+        setVirtualScroll(deltaY);
+      }
+      touchStartY = touchY;
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const normalizedX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseTargetRef.current = normalizedX * 100;
+    };
+    const handleMouseLeave = () => {
+      mouseTargetRef.current = 0;
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('touchstart', handleTouchStart, {
+      passive: false,
+    });
+    container.addEventListener('touchmove', handleTouchMove, {
+      passive: false,
+    });
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    const animate = () => {
+      setSmoothScroll((current) => current + (scrollTargetRef.current - current) * 0.09);
+      setSmoothMouseX((current) => current + (mouseTargetRef.current - current) * 0.08);
+      frame = window.requestAnimationFrame(animate);
+    };
+
+    frame = window.requestAnimationFrame(animate);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const width = containerSize.width || 980;
+  const height = containerSize.height || 720;
+  const total = usLocations.length;
+  const isMobile = width < 768;
+  const morphValue = Math.min(Math.max(smoothScroll / 600, 0), 1);
+  const rotateProgress = Math.min(
+    Math.max((smoothScroll - 600) / (heroMaxScroll - 600), 0),
+    1,
+  );
+  const introOpacity =
+    introPhase === 'circle' && morphValue < 0.5 ? 1 - morphValue * 2 : 0;
+  const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
+
+  return (
+    <div ref={containerRef} className="state-delivery-hero">
+      <div
+        className="state-hero-intro"
+        style={
+          {
+            opacity: introOpacity,
+            transform: `translate(-50%, -50%) translate3d(0, ${introOpacity ? 0 : 20}px, 0)`,
+            filter: `blur(${introOpacity ? 0 : 10}px)`,
+          } as CSSProperties
+        }
+      >
+        <Title>Delivered to all 50 states.</Title>
+        <Text>Scroll to explore</Text>
+      </div>
+
+      <div
+        className="state-hero-content"
+        style={
+          {
+            opacity: contentOpacity,
+            transform: `translate(-50%, ${(1 - contentOpacity) * 20}px)`,
+          } as CSSProperties
+        }
+      >
+        <Tag color="cyan" icon={<TruckOutlined />}>
+          COEX USA Connect Express
+        </Tag>
+        <Title level={2}>Ship city to city across America.</Title>
+        <Paragraph>
+          {metrics.routeLabel} is priced as Zone {metrics.zone} with UPS and
+          FedEx handoff ready.
+        </Paragraph>
+        <Space wrap className="state-hero-actions">
+          <Link href="/quote" passHref legacyBehavior>
+            <Button type="primary" icon={<DollarCircleOutlined />}>
+              Get quote
+            </Button>
+          </Link>
+          <Link href="/tracking" passHref legacyBehavior>
+            <Button icon={<SearchOutlined />}>
+              Track package
+            </Button>
+          </Link>
+        </Space>
+      </div>
+
+      <div className="state-card-stage" aria-label="COEX 50-state destination city cards">
+        {usLocations.map((location, index) => {
+          let x = 0;
+          let y = 0;
+          let rotation = 0;
+          let scale = 1;
+          let opacity = 1;
+
+          if (introPhase === 'scatter') {
+            const scatter = scatterPositions[index];
+            x = scatter.x;
+            y = scatter.y;
+            rotation = scatter.rotation;
+            scale = scatter.scale;
+            opacity = scatter.opacity;
+          } else if (introPhase === 'line') {
+            const lineSpacing = 70;
+            const lineTotalWidth = total * lineSpacing;
+            x = index * lineSpacing - lineTotalWidth / 2;
+          } else {
+            const minDimension = Math.min(width, height);
+            const circleRadius = Math.min(minDimension * 0.42, 450);
+            const circleAngle = (index / total) * 360;
+            const circleRad = (circleAngle * Math.PI) / 180;
+            const circleX = Math.cos(circleRad) * circleRadius;
+            const circleY = Math.sin(circleRad) * circleRadius;
+            const circleRotation = circleAngle + 90;
+
+            const baseRadius = Math.min(width, height * 1.5);
+            const arcRadius = baseRadius * (isMobile ? 1.4 : 1.1);
+            const arcApexY = height * (isMobile ? 0.35 : 0.25);
+            const arcCenterY = arcApexY + arcRadius;
+            const spreadAngle = isMobile ? 100 : 130;
+            const startAngle = -90 - spreadAngle / 2;
+            const step = spreadAngle / (total - 1);
+            const boundedRotation = -rotateProgress * spreadAngle * 0.8;
+            const currentArcAngle = startAngle + index * step + boundedRotation;
+            const arcRad = (currentArcAngle * Math.PI) / 180;
+            const arcScale = isMobile ? 1.4 : 1.8;
+            const arcX = Math.cos(arcRad) * arcRadius + smoothMouseX;
+            const arcY = Math.sin(arcRad) * arcRadius + arcCenterY;
+            const arcRotation = currentArcAngle + 90;
+
+            x = circleX * (1 - morphValue) + arcX * morphValue;
+            y = circleY * (1 - morphValue) + arcY * morphValue;
+            rotation = circleRotation * (1 - morphValue) + arcRotation * morphValue;
+            scale = 1 * (1 - morphValue) + arcScale * morphValue;
+          }
+
+          return (
+            <div
+              className="state-photo-card"
+              key={location.code}
+              style={
+                {
+                  '--card-z': String(index),
+                  opacity,
+                  transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`,
+                } as CSSProperties
+              }
+            >
+              <div className="state-photo-card-inner">
+                <div className="state-photo-front">
+                  <img
+                    src={getCityImage(location, index)}
+                    alt={`${location.city}, ${location.name}`}
+                    loading={index < 12 ? 'eager' : 'lazy'}
+                  />
+                  <span>{location.code}</span>
+                  <strong>{location.city}</strong>
+                </div>
+                <div className="state-photo-back">
+                  <small>{location.region}</small>
+                  <strong>{location.name}</strong>
+                  <span>{location.zip}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1860,6 +2375,7 @@ function ShippingFrame({
           </Space>
         </Header>
         <TruckAnimationRail />
+        <DesktopSideDesign />
         <Content>{children}</Content>
         <Footer className="ship-footer">
           <Row gutter={[24, 24]}>
@@ -1924,6 +2440,267 @@ function LocationSelect({
         onChange={onChange}
       />
     </Form.Item>
+  );
+}
+
+function QuoteContactForm({
+  contact,
+  setContact,
+  setQuote,
+}: {
+  contact: QuoteContactState;
+  setContact: Dispatch<SetStateAction<QuoteContactState>>;
+  setQuote: Dispatch<SetStateAction<QuoteState>>;
+}) {
+  function setContactField(key: keyof QuoteContactState, value: string) {
+    setContact((current) => ({ ...current, [key]: value }));
+  }
+
+  function setAddressState(kind: 'pickup' | 'delivery', state: string) {
+    const location = locationByCode[state];
+    setContact((current) => ({
+      ...current,
+      ...(kind === 'pickup'
+        ? {
+            pickupState: state,
+            pickupCity: location.city,
+            pickupZip: location.zip,
+          }
+        : {
+            deliveryState: state,
+            deliveryCity: location.city,
+            deliveryZip: location.zip,
+          }),
+    }));
+    setQuote((current) => ({
+      ...current,
+      ...(kind === 'pickup'
+        ? { originState: state }
+        : { destinationState: state }),
+    }));
+  }
+
+  return (
+    <Card
+      title="1. Customer, pickup, and delivery details"
+      className="ant-card-premium quote-details-card"
+    >
+      <Space orientation="vertical" size={18} className="full-width">
+        <Row gutter={[12, 12]}>
+          <Col xs={24} md={8}>
+            <Form.Item label="Shipper full name" required>
+              <Input
+                value={contact.shipperName}
+                onChange={(event) =>
+                  setContactField('shipperName', event.target.value)
+                }
+                placeholder="Full name"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item label="Shipper email" required>
+              <Input
+                type="email"
+                value={contact.shipperEmail}
+                onChange={(event) =>
+                  setContactField('shipperEmail', event.target.value)
+                }
+                placeholder="name@example.com"
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item label="Shipper phone" required>
+              <Input
+                value={contact.shipperPhone}
+                onChange={(event) =>
+                  setContactField('shipperPhone', event.target.value)
+                }
+                placeholder="(555) 555-0123"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <div className="quote-address-grid">
+          <div className="quote-address-panel">
+            <div className="quote-address-head">
+              <EnvironmentOutlined />
+              <Text strong>Pickup address</Text>
+            </div>
+            <Row gutter={[12, 12]}>
+              <Col xs={24} md={16}>
+                <Form.Item label="Street address" required>
+                  <Input
+                    value={contact.pickupStreet}
+                    onChange={(event) =>
+                      setContactField('pickupStreet', event.target.value)
+                    }
+                    placeholder="Street address"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="Apt / suite / ext.">
+                  <Input
+                    value={contact.pickupUnit}
+                    onChange={(event) =>
+                      setContactField('pickupUnit', event.target.value)
+                    }
+                    placeholder="Suite, dock, gate"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="City" required>
+                  <Input
+                    value={contact.pickupCity}
+                    onChange={(event) =>
+                      setContactField('pickupCity', event.target.value)
+                    }
+                    placeholder="City"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="State" required>
+                  <Select
+                    showSearch={{ optionFilterProp: 'label' }}
+                    value={contact.pickupState}
+                    options={locationSelectOptions()}
+                    onChange={(state) => setAddressState('pickup', state)}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="ZIP code" required>
+                  <Input
+                    value={contact.pickupZip}
+                    onChange={(event) =>
+                      setContactField('pickupZip', event.target.value)
+                    }
+                    placeholder="ZIP"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          <div className="quote-address-panel">
+            <div className="quote-address-head">
+              <TruckOutlined />
+              <Text strong>Delivery contact and address</Text>
+            </div>
+            <Row gutter={[12, 12]}>
+              <Col xs={24} md={8}>
+                <Form.Item label="Recipient full name" required>
+                  <Input
+                    value={contact.recipientName}
+                    onChange={(event) =>
+                      setContactField('recipientName', event.target.value)
+                    }
+                    placeholder="Recipient name"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="Recipient email" required>
+                  <Input
+                    type="email"
+                    value={contact.recipientEmail}
+                    onChange={(event) =>
+                      setContactField('recipientEmail', event.target.value)
+                    }
+                    placeholder="recipient@example.com"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="Recipient phone" required>
+                  <Input
+                    value={contact.recipientPhone}
+                    onChange={(event) =>
+                      setContactField('recipientPhone', event.target.value)
+                    }
+                    placeholder="(555) 555-0123"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={16}>
+                <Form.Item label="Street address" required>
+                  <Input
+                    value={contact.deliveryStreet}
+                    onChange={(event) =>
+                      setContactField('deliveryStreet', event.target.value)
+                    }
+                    placeholder="Street address"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="Apt / suite / ext.">
+                  <Input
+                    value={contact.deliveryUnit}
+                    onChange={(event) =>
+                      setContactField('deliveryUnit', event.target.value)
+                    }
+                    placeholder="Apt, suite, hotel, desk"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="City" required>
+                  <Input
+                    value={contact.deliveryCity}
+                    onChange={(event) =>
+                      setContactField('deliveryCity', event.target.value)
+                    }
+                    placeholder="City"
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="State" required>
+                  <Select
+                    showSearch={{ optionFilterProp: 'label' }}
+                    value={contact.deliveryState}
+                    options={locationSelectOptions()}
+                    onChange={(state) => setAddressState('delivery', state)}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="ZIP code" required>
+                  <Input
+                    value={contact.deliveryZip}
+                    onChange={(event) =>
+                      setContactField('deliveryZip', event.target.value)
+                    }
+                    placeholder="ZIP"
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={24}>
+                <Form.Item label="Delivery notes">
+                  <Input.TextArea
+                    value={contact.deliveryInstructions}
+                    onChange={(event) =>
+                      setContactField(
+                        'deliveryInstructions',
+                        event.target.value,
+                      )
+                    }
+                    rows={3}
+                    placeholder="Gate code, hotel desk, receiving dock, or timing notes"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+        </div>
+      </Space>
+    </Card>
   );
 }
 
@@ -2200,11 +2977,15 @@ function TrackingPanel({
 }) {
   const [trackingNumber, setTrackingNumber] = useState(shipment.number);
   const [carrier, setCarrier] = useState<TrackingCarrier>('auto');
+  const normalizedInput = normalizeTrackingInput(trackingNumber, carrier);
 
-  function runSearch() {
-    const requested = trackingNumber.trim().toUpperCase();
+  function runSearch(value = trackingNumber) {
+    const normalized = normalizeTrackingInput(value, carrier);
+    const requested = normalized.trackingNumber.trim().toUpperCase();
     const demo = sampleShipments.find((item) => item.number === requested);
-    setShipment(demo ?? createFallbackShipment(requested, carrier));
+    setCarrier(normalized.carrier);
+    setTrackingNumber(requested || normalized.raw);
+    setShipment(demo ?? createFallbackShipment(requested, normalized.carrier));
   }
 
   return (
@@ -2219,7 +3000,7 @@ function TrackingPanel({
               enterButton="Track"
               prefix={<SearchOutlined />}
               onSearch={runSearch}
-              placeholder="COEX-8143-2290, 1Z..., or FedEx number"
+              placeholder="COEX-8143-2290, UPS/FedEx number, or carrier tracking link"
             />
           </Col>
           <Col xs={24} lg={12}>
@@ -2235,6 +3016,37 @@ function TrackingPanel({
             />
           </Col>
         </Row>
+
+        <div className="carrier-page-actions">
+          <Text strong>Need the carrier form?</Text>
+          <Space wrap>
+            <Button
+              href={carrierTrackingPages.ups}
+              target="_blank"
+              rel="noreferrer"
+              icon={<LinkOutlined />}
+            >
+              Open UPS tracking page
+            </Button>
+            <Button
+              href={carrierTrackingPages.fedex}
+              target="_blank"
+              rel="noreferrer"
+              icon={<LinkOutlined />}
+            >
+              Open FedEx tracking page
+            </Button>
+          </Space>
+        </div>
+
+        {normalizedInput.isCarrierPage ? (
+          <Alert
+            type="info"
+            showIcon
+            title={`${getCarrierName(normalizedInput.carrier)} tracking page detected`}
+            description="Open the carrier page to enter the tracking number there, or paste the tracking number here and COEX will prepare the exact carrier handoff link."
+          />
+        ) : null}
 
         <div className="tracking-head">
           <div>
@@ -2358,69 +3170,8 @@ export function HomePage() {
 
   return (
     <ShippingFrame active="home">
-      <section className="hero-section">
-        <Row gutter={[28, 28]} align="middle">
-          <Col xs={24} lg={13}>
-            <Space orientation="vertical" size={22} className="full-width">
-              <Tag color="cyan" icon={<GlobalOutlined />}>
-                USA-only shipping platform
-              </Tag>
-              <Title className="hero-title">
-                Ship luggage, boxes, and freight across every US state.
-              </Title>
-              <Paragraph className="hero-subtitle">
-                A premium COEX Connect Express redesign with LugLess-style
-                quoting, Ant Design systems, state-by-state pricing, UPS and
-                FedEx tracking handoff, booking, documents, and shipment
-                visibility.
-              </Paragraph>
-              <HeroStatStrip
-                items={[
-                  {
-                    icon: <EnvironmentOutlined />,
-                    label: 'Current lane',
-                    value: `${formatLocation(quote.originState)} to ${formatLocation(quote.destinationState)}`,
-                  },
-                  {
-                    icon: <TruckOutlined />,
-                    label: 'Best carrier',
-                    value: carrierProfiles[metrics.selectedCarrier].name,
-                  },
-                  {
-                    icon: <DollarCircleOutlined />,
-                    label: 'Estimated total',
-                    value: formatMoney(metrics.total),
-                  },
-                ]}
-              />
-              <Row gutter={[12, 12]} className="ship-metrics">
-                {coverageMetrics.map(([value, label]) => (
-                  <Col xs={12} md={6} key={label}>
-                    <Card className="metric-card">
-                      <Statistic title={label} value={value} />
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-              <Space wrap>
-                <Button
-                  type="primary"
-                  size="large"
-                  href="/quote"
-                  icon={<DollarCircleOutlined />}
-                >
-                  Price a lane
-                </Button>
-                <Button size="large" href="/tracking" icon={<SearchOutlined />}>
-                  Track package
-                </Button>
-              </Space>
-            </Space>
-          </Col>
-          <Col xs={24} lg={11}>
-            <QuotePanel quote={quote} setQuote={setQuote} compact />
-          </Col>
-        </Row>
+      <section className="hero-section hero-section-morph">
+        <StateDeliveryHero metrics={metrics} />
       </section>
 
       <section className="visual-band">
@@ -2632,9 +3383,34 @@ export function HomePage() {
 export function QuotePage() {
   const [quote, setQuote] = useQuoteState();
   const [, setShipment] = useState<Shipment>(sampleShipments[0]);
+  const [quoteContact, setQuoteContact] =
+    useState<QuoteContactState>(initialQuoteContact);
   const [saved, setSaved] = useState(false);
   const metrics = getQuoteMetrics(quote);
+  const quoteContactComplete = isQuoteContactComplete(quoteContact);
   useWebMcpTools({ quote, setQuote, setShipment });
+
+  function setQuoteOriginState(originState: string) {
+    const location = locationByCode[originState];
+    setQuote((current) => ({ ...current, originState }));
+    setQuoteContact((current) => ({
+      ...current,
+      pickupState: originState,
+      pickupCity: location.city,
+      pickupZip: location.zip,
+    }));
+  }
+
+  function setQuoteDestinationState(destinationState: string) {
+    const location = locationByCode[destinationState];
+    setQuote((current) => ({ ...current, destinationState }));
+    setQuoteContact((current) => ({
+      ...current,
+      deliveryState: destinationState,
+      deliveryCity: location.city,
+      deliveryZip: location.zip,
+    }));
+  }
 
   return (
     <ShippingFrame active="quote">
@@ -2671,9 +3447,16 @@ export function QuotePage() {
       <section className="workspace-section">
         <Row gutter={[20, 20]} align="top">
           <Col xs={24} lg={15}>
-            <Space orientation="vertical" size={18} className="full-width">
+            <Form layout="vertical" className="full-width">
+              <Space orientation="vertical" size={18} className="full-width">
+              <QuoteContactForm
+                contact={quoteContact}
+                setContact={setQuoteContact}
+                setQuote={setQuote}
+              />
+
               <Card
-                title="1. Origin and destination"
+                title="2. Origin and destination"
                 className="ant-card-premium"
               >
                 <Row gutter={[12, 12]}>
@@ -2681,21 +3464,14 @@ export function QuotePage() {
                     <LocationSelect
                       label="Origin state location"
                       value={quote.originState}
-                      onChange={(originState) =>
-                        setQuote((current) => ({ ...current, originState }))
-                      }
+                      onChange={setQuoteOriginState}
                     />
                   </Col>
                   <Col xs={24} md={12}>
                     <LocationSelect
                       label="Destination state location"
                       value={quote.destinationState}
-                      onChange={(destinationState) =>
-                        setQuote((current) => ({
-                          ...current,
-                          destinationState,
-                        }))
-                      }
+                      onChange={setQuoteDestinationState}
                     />
                   </Col>
                 </Row>
@@ -2707,7 +3483,7 @@ export function QuotePage() {
                 />
               </Card>
 
-              <Card title="2. Items" className="ant-card-premium">
+              <Card title="3. Items" className="ant-card-premium">
                 <Row gutter={[12, 12]}>
                   {itemOrder.map((key) => {
                     const definition = itemDefinitions[key];
@@ -2747,7 +3523,7 @@ export function QuotePage() {
               </Card>
 
               <Card
-                title="3. Service, carrier, and options"
+                title="4. Service, carrier, and options"
                 className="ant-card-premium"
               >
                 <Space orientation="vertical" size={18} className="full-width">
@@ -2906,6 +3682,7 @@ export function QuotePage() {
                 </Space>
               </Card>
             </Space>
+            </Form>
           </Col>
 
           <Col xs={24} lg={9}>
@@ -2979,6 +3756,38 @@ export function QuotePage() {
                     label: 'Pickup',
                     children: `${quote.pickupDate} / ${quote.pickupWindow}`,
                   },
+                  {
+                    key: 'shipper',
+                    label: 'Shipper',
+                    children: quoteContact.shipperName || 'Required',
+                  },
+                  {
+                    key: 'recipient',
+                    label: 'Recipient',
+                    children: quoteContact.recipientName || 'Required',
+                  },
+                  {
+                    key: 'pickupAddress',
+                    label: 'Pickup address',
+                    children: formatAddressLine({
+                      street: quoteContact.pickupStreet,
+                      unit: quoteContact.pickupUnit,
+                      city: quoteContact.pickupCity,
+                      state: quoteContact.pickupState,
+                      zip: quoteContact.pickupZip,
+                    }),
+                  },
+                  {
+                    key: 'deliveryAddress',
+                    label: 'Delivery address',
+                    children: formatAddressLine({
+                      street: quoteContact.deliveryStreet,
+                      unit: quoteContact.deliveryUnit,
+                      city: quoteContact.deliveryCity,
+                      state: quoteContact.deliveryState,
+                      zip: quoteContact.deliveryZip,
+                    }),
+                  },
                 ]}
               />
               <div className="rate-intelligence">
@@ -3000,10 +3809,17 @@ export function QuotePage() {
               </div>
               <CarrierComparison metrics={metrics} />
               <Space orientation="vertical" className="full-width" size={12}>
+                {!quoteContactComplete ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    title="Complete customer and address details before saving this estimate."
+                  />
+                ) : null}
                 <Button
                   type="primary"
                   block
-                  disabled={metrics.packages === 0}
+                  disabled={metrics.packages === 0 || !quoteContactComplete}
                   onClick={() => setSaved(true)}
                   icon={<FileDoneOutlined />}
                 >
@@ -3016,7 +3832,7 @@ export function QuotePage() {
                   <Alert
                     type="success"
                     showIcon
-                    title="Quote saved locally for this demo."
+                    title={`Quote saved locally for ${quoteContact.shipperName}.`}
                   />
                 ) : null}
               </Space>

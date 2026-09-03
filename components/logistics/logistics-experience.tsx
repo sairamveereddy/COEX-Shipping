@@ -2139,6 +2139,18 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
     const introOpacity = currentPhase === 'circle' && morphValue < 0.5 ? 1 - morphValue * 2 : 0;
     const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
 
+    // Precalculate card constants to save 3000 calculations per second
+    const minDimension = Math.min(width, height);
+    const circleRadius = Math.min(minDimension * 0.42, 450);
+    const baseRadius = Math.min(width, height * 1.5);
+    const arcRadius = baseRadius * (isMobile ? 1.4 : 1.1);
+    const arcApexY = height * (isMobile ? 0.35 : 0.25);
+    const arcCenterY = arcApexY + arcRadius;
+    const spreadAngle = isMobile ? 100 : 130;
+    const startAngle = -90 - spreadAngle / 2;
+    const step = spreadAngle / (total - 1);
+    const boundedRotation = -rotateProgress * spreadAngle * 0.8;
+
     if (introTextRef.current) {
       introTextRef.current.style.opacity = String(introOpacity);
       introTextRef.current.style.transform = `translate(-50%, -50%) translate3d(0, ${introOpacity ? 0 : 20}px, 0)`;
@@ -2172,22 +2184,12 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
         const lineTotalWidth = total * lineSpacing;
         x = index * lineSpacing - lineTotalWidth / 2;
       } else {
-        const minDimension = Math.min(width, height);
-        const circleRadius = Math.min(minDimension * 0.42, 450);
         const circleAngle = (index / total) * 360;
         const circleRad = (circleAngle * Math.PI) / 180;
         const circleX = Math.cos(circleRad) * circleRadius;
         const circleY = Math.sin(circleRad) * circleRadius;
         const circleRotation = circleAngle + 90;
 
-        const baseRadius = Math.min(width, height * 1.5);
-        const arcRadius = baseRadius * (isMobile ? 1.4 : 1.1);
-        const arcApexY = height * (isMobile ? 0.35 : 0.25);
-        const arcCenterY = arcApexY + arcRadius;
-        const spreadAngle = isMobile ? 100 : 130;
-        const startAngle = -90 - spreadAngle / 2;
-        const step = spreadAngle / (total - 1);
-        const boundedRotation = -rotateProgress * spreadAngle * 0.8;
         const currentArcAngle = startAngle + index * step + boundedRotation;
         const arcRad = (currentArcAngle * Math.PI) / 180;
         const arcScale = isMobile ? 1.4 : 1.8;
@@ -2201,6 +2203,9 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
         scale = 1 * (1 - morphValue) + arcScale * morphValue;
       }
 
+      // Disable CSS transition during JS-driven scrolling to fix severe lag
+      el.style.transition = smoothScrollRef.current > 5 ? 'none' : '';
+      el.style.willChange = smoothScrollRef.current > 5 ? 'transform, opacity' : 'auto';
       el.style.opacity = String(opacity);
       el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`;
     });

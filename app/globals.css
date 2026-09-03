@@ -89,7 +89,7 @@ body {
 
 html,
 body {
-  overflow-x: hidden;
+  /* removed overflow-x: hidden because it breaks sticky and scroll on iOS */
 }
 
 @layer base {
@@ -108,6 +108,7 @@ body {
 
 .ship-app-shell {
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     linear-gradient(
       180deg,
@@ -416,7 +417,6 @@ body {
   border-bottom: 1px solid rgba(15, 143, 147, 0.14);
   background: #fafafa;
   perspective: 1000px;
-  touch-action: none;
 }
 
 .state-delivery-hero::before {

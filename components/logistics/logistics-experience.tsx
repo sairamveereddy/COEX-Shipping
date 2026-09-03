@@ -2021,9 +2021,14 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
     'scatter',
   );
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [smoothScroll, setSmoothScroll] = useState(0);
-  const [smoothMouseX, setSmoothMouseX] = useState(0);
+  const smoothScrollRef = useRef(0);
+  const smoothMouseXRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const introPhaseRef = useRef(introPhase);
+  const introTextRef = useRef<HTMLDivElement>(null);
+  const contentTextRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  useEffect(() => { introPhaseRef.current = introPhase; }, [introPhase]);
   const scrollTrackRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef(0);
   const scrollTargetRef = useRef(0);
@@ -2120,9 +2125,93 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
     };
   }, []);
 
+  const updateAnimation = useCallback(() => {
+    const width = containerSize.width || 980;
+    const height = containerSize.height || 720;
+    const total = usLocations.length;
+    const isMobile = width < 768;
+    const morphValue = Math.min(Math.max(smoothScrollRef.current / 600, 0), 1);
+    const rotateProgress = Math.min(
+      Math.max((smoothScrollRef.current - 600) / (heroMaxScroll - 600), 0),
+      1,
+    );
+    const currentPhase = introPhaseRef.current;
+    const introOpacity = currentPhase === 'circle' && morphValue < 0.5 ? 1 - morphValue * 2 : 0;
+    const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
+
+    if (introTextRef.current) {
+      introTextRef.current.style.opacity = String(introOpacity);
+      introTextRef.current.style.transform = `translate(-50%, -50%) translate3d(0, ${introOpacity ? 0 : 20}px, 0)`;
+      introTextRef.current.style.filter = `blur(${introOpacity ? 0 : 10}px)`;
+    }
+    
+    if (contentTextRef.current) {
+      contentTextRef.current.style.opacity = String(contentOpacity);
+      contentTextRef.current.style.transform = `translate(-50%, ${(1 - contentOpacity) * 20}px)`;
+    }
+
+    usLocations.forEach((location, index) => {
+      const el = cardRefs.current[index];
+      if (!el) return;
+
+      let x = 0;
+      let y = 0;
+      let rotation = 0;
+      let scale = 1;
+      let opacity = 1;
+
+      if (currentPhase === 'scatter') {
+        const scatter = scatterPositions[index];
+        x = scatter.x;
+        y = scatter.y;
+        rotation = scatter.rotation;
+        scale = scatter.scale;
+        opacity = scatter.opacity;
+      } else if (currentPhase === 'line') {
+        const lineSpacing = 70;
+        const lineTotalWidth = total * lineSpacing;
+        x = index * lineSpacing - lineTotalWidth / 2;
+      } else {
+        const minDimension = Math.min(width, height);
+        const circleRadius = Math.min(minDimension * 0.42, 450);
+        const circleAngle = (index / total) * 360;
+        const circleRad = (circleAngle * Math.PI) / 180;
+        const circleX = Math.cos(circleRad) * circleRadius;
+        const circleY = Math.sin(circleRad) * circleRadius;
+        const circleRotation = circleAngle + 90;
+
+        const baseRadius = Math.min(width, height * 1.5);
+        const arcRadius = baseRadius * (isMobile ? 1.4 : 1.1);
+        const arcApexY = height * (isMobile ? 0.35 : 0.25);
+        const arcCenterY = arcApexY + arcRadius;
+        const spreadAngle = isMobile ? 100 : 130;
+        const startAngle = -90 - spreadAngle / 2;
+        const step = spreadAngle / (total - 1);
+        const boundedRotation = -rotateProgress * spreadAngle * 0.8;
+        const currentArcAngle = startAngle + index * step + boundedRotation;
+        const arcRad = (currentArcAngle * Math.PI) / 180;
+        const arcScale = isMobile ? 1.4 : 1.8;
+        const arcX = Math.cos(arcRad) * arcRadius + smoothMouseXRef.current;
+        const arcY = Math.sin(arcRad) * arcRadius + arcCenterY;
+        const arcRotation = currentArcAngle + 90;
+
+        x = circleX * (1 - morphValue) + arcX * morphValue;
+        y = circleY * (1 - morphValue) + arcY * morphValue;
+        rotation = circleRotation * (1 - morphValue) + arcRotation * morphValue;
+        scale = 1 * (1 - morphValue) + arcScale * morphValue;
+      }
+
+      el.style.opacity = String(opacity);
+      el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`;
+    });
+  }, [containerSize, scatterPositions]);
+
+  useEffect(() => {
+    updateAnimation();
+  }, [introPhase, containerSize, updateAnimation]);
+
   useEffect(() => {
     let ticking = false;
-
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
@@ -2131,75 +2220,49 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
             let scrolled = -(track.getBoundingClientRect().top - 72);
             if (scrolled < 0) scrolled = 0;
             if (scrolled > heroMaxScroll) scrolled = heroMaxScroll;
-            setSmoothScroll(scrolled);
+            smoothScrollRef.current = scrolled;
+            updateAnimation();
           }
           ticking = false;
         });
         ticking = true;
       }
     };
-
     window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
     handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
+  }, [updateAnimation]);
 
-    return () => {
-      window.removeEventListener('scroll', handleScroll, { capture: true });
-    };
-  }, []);
-
-  // Separate effect for mouse since it runs at a different rate
   useEffect(() => {
     let frame = 0;
     const animateMouse = () => {
-      setSmoothMouseX((current) => {
-        const diff = mouseTargetRef.current - current;
-        if (Math.abs(diff) < 0.5) return current;
-        return current + diff * 0.08;
-      });
+      const diff = mouseTargetRef.current - smoothMouseXRef.current;
+      if (Math.abs(diff) >= 0.5) {
+        smoothMouseXRef.current += diff * 0.08;
+        updateAnimation();
+      }
       frame = window.requestAnimationFrame(animateMouse);
     };
     frame = window.requestAnimationFrame(animateMouse);
     return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  const width = containerSize.width || 980;
-  const height = containerSize.height || 720;
-  const total = usLocations.length;
-  const isMobile = width < 768;
-  const morphValue = Math.min(Math.max(smoothScroll / 600, 0), 1);
-  const rotateProgress = Math.min(
-    Math.max((smoothScroll - 600) / (heroMaxScroll - 600), 0),
-    1,
-  );
-  const introOpacity =
-    introPhase === 'circle' && morphValue < 0.5 ? 1 - morphValue * 2 : 0;
-  const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
+  }, [updateAnimation]);
 
   return (
     <div ref={scrollTrackRef} style={{ height: `calc(100vh - 72px + ${heroMaxScroll}px)` }}>
       <div ref={containerRef} className="state-delivery-hero" style={{ position: 'sticky', top: 72, height: 'calc(100vh - 72px)', overflow: 'hidden' }}>
       <div
+        ref={introTextRef}
         className="state-hero-intro"
-        style={
-          {
-            opacity: introOpacity,
-            transform: `translate(-50%, -50%) translate3d(0, ${introOpacity ? 0 : 20}px, 0)`,
-            filter: `blur(${introOpacity ? 0 : 10}px)`,
-          } as CSSProperties
-        }
+        style={{ opacity: 0 } as CSSProperties}
       >
         <Title>Delivered to all 50 states.</Title>
         <Text>Scroll to explore</Text>
       </div>
 
       <div
+        ref={contentTextRef}
         className="state-hero-content"
-        style={
-          {
-            opacity: contentOpacity,
-            transform: `translate(-50%, ${(1 - contentOpacity) * 20}px)`,
-          } as CSSProperties
-        }
+        style={{ opacity: 0 } as CSSProperties}
       >
         <Tag color="cyan" icon={<TruckOutlined />}>
           COEX USA Connect Express
@@ -2225,64 +2288,12 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
 
       <div className="state-card-stage" aria-label="COEX 50-state destination city cards">
         {usLocations.map((location, index) => {
-          let x = 0;
-          let y = 0;
-          let rotation = 0;
-          let scale = 1;
-          let opacity = 1;
-
-          if (introPhase === 'scatter') {
-            const scatter = scatterPositions[index];
-            x = scatter.x;
-            y = scatter.y;
-            rotation = scatter.rotation;
-            scale = scatter.scale;
-            opacity = scatter.opacity;
-          } else if (introPhase === 'line') {
-            const lineSpacing = 70;
-            const lineTotalWidth = total * lineSpacing;
-            x = index * lineSpacing - lineTotalWidth / 2;
-          } else {
-            const minDimension = Math.min(width, height);
-            const circleRadius = Math.min(minDimension * 0.42, 450);
-            const circleAngle = (index / total) * 360;
-            const circleRad = (circleAngle * Math.PI) / 180;
-            const circleX = Math.cos(circleRad) * circleRadius;
-            const circleY = Math.sin(circleRad) * circleRadius;
-            const circleRotation = circleAngle + 90;
-
-            const baseRadius = Math.min(width, height * 1.5);
-            const arcRadius = baseRadius * (isMobile ? 1.4 : 1.1);
-            const arcApexY = height * (isMobile ? 0.35 : 0.25);
-            const arcCenterY = arcApexY + arcRadius;
-            const spreadAngle = isMobile ? 100 : 130;
-            const startAngle = -90 - spreadAngle / 2;
-            const step = spreadAngle / (total - 1);
-            const boundedRotation = -rotateProgress * spreadAngle * 0.8;
-            const currentArcAngle = startAngle + index * step + boundedRotation;
-            const arcRad = (currentArcAngle * Math.PI) / 180;
-            const arcScale = isMobile ? 1.4 : 1.8;
-            const arcX = Math.cos(arcRad) * arcRadius + smoothMouseX;
-            const arcY = Math.sin(arcRad) * arcRadius + arcCenterY;
-            const arcRotation = currentArcAngle + 90;
-
-            x = circleX * (1 - morphValue) + arcX * morphValue;
-            y = circleY * (1 - morphValue) + arcY * morphValue;
-            rotation = circleRotation * (1 - morphValue) + arcRotation * morphValue;
-            scale = 1 * (1 - morphValue) + arcScale * morphValue;
-          }
-
           return (
             <div
+              ref={(el) => { cardRefs.current[index] = el; }}
               className="state-photo-card"
               key={location.code}
-              style={
-                {
-                  '--card-z': String(index),
-                  opacity,
-                  transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg) scale(${scale})`,
-                } as CSSProperties
-              }
+              style={{ '--card-z': String(index) } as CSSProperties}
             >
               <div className="state-photo-card-inner">
                 <div className="state-photo-front">

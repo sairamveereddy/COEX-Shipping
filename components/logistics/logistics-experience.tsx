@@ -2121,33 +2121,44 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
   }, []);
 
   useEffect(() => {
-    let frame = 0;
-    const animate = () => {
-      const track = scrollTrackRef.current;
-      if (track) {
-        let scrolled = -track.getBoundingClientRect().top;
-        if (scrolled < 0) scrolled = 0;
-        if (scrolled > heroMaxScroll) scrolled = heroMaxScroll;
-        scrollTargetRef.current = scrolled;
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const track = scrollTrackRef.current;
+          if (track) {
+            let scrolled = -(track.getBoundingClientRect().top - 72);
+            if (scrolled < 0) scrolled = 0;
+            if (scrolled > heroMaxScroll) scrolled = heroMaxScroll;
+            setSmoothScroll(scrolled);
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
+    };
 
-      setSmoothScroll((current) => {
-        const diff = scrollTargetRef.current - current;
-        if (Math.abs(diff) < 0.5) return current; // stop re-rendering if close enough
-        return current + diff * 0.09;
-      });
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    handleScroll();
 
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+    };
+  }, []);
+
+  // Separate effect for mouse since it runs at a different rate
+  useEffect(() => {
+    let frame = 0;
+    const animateMouse = () => {
       setSmoothMouseX((current) => {
         const diff = mouseTargetRef.current - current;
         if (Math.abs(diff) < 0.5) return current;
         return current + diff * 0.08;
       });
-
-      frame = window.requestAnimationFrame(animate);
+      frame = window.requestAnimationFrame(animateMouse);
     };
-
-    frame = window.requestAnimationFrame(animate);
-
+    frame = window.requestAnimationFrame(animateMouse);
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
@@ -2165,8 +2176,8 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
   const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
 
   return (
-    <div ref={scrollTrackRef} style={{ height: `calc(100vh + ${heroMaxScroll}px)` }}>
-      <div ref={containerRef} className="state-delivery-hero" style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
+    <div ref={scrollTrackRef} style={{ height: `calc(100vh - 72px + ${heroMaxScroll}px)` }}>
+      <div ref={containerRef} className="state-delivery-hero" style={{ position: 'sticky', top: 72, height: 'calc(100vh - 72px)', overflow: 'hidden' }}>
       <div
         className="state-hero-intro"
         style={

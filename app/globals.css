@@ -108,7 +108,6 @@ body {
 
 .ship-app-shell {
   min-height: 100vh;
-  overflow-x: hidden;
   background:
     linear-gradient(
       180deg,

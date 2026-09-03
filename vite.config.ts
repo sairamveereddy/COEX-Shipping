@@ -56,7 +56,7 @@ export default defineConfig(async () => {
       sites(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
+        config: process.env.NODE_ENV === 'production' ? {} : localBindingConfig,
       }),
     ],
   };

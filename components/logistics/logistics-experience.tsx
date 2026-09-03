@@ -2112,19 +2112,37 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
       scrollRef.current = scrolled;
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
     handleScroll();
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll, { capture: true });
     };
   }, []);
 
   useEffect(() => {
     let frame = 0;
     const animate = () => {
-      setSmoothScroll((current) => current + (scrollTargetRef.current - current) * 0.09);
-      setSmoothMouseX((current) => current + (mouseTargetRef.current - current) * 0.08);
+      const track = scrollTrackRef.current;
+      if (track) {
+        let scrolled = -track.getBoundingClientRect().top;
+        if (scrolled < 0) scrolled = 0;
+        if (scrolled > heroMaxScroll) scrolled = heroMaxScroll;
+        scrollTargetRef.current = scrolled;
+      }
+
+      setSmoothScroll((current) => {
+        const diff = scrollTargetRef.current - current;
+        if (Math.abs(diff) < 0.5) return current; // stop re-rendering if close enough
+        return current + diff * 0.09;
+      });
+
+      setSmoothMouseX((current) => {
+        const diff = mouseTargetRef.current - current;
+        if (Math.abs(diff) < 0.5) return current;
+        return current + diff * 0.08;
+      });
+
       frame = window.requestAnimationFrame(animate);
     };
 

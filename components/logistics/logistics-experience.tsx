@@ -2024,6 +2024,7 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
   const [smoothScroll, setSmoothScroll] = useState(0);
   const [smoothMouseX, setSmoothMouseX] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollTrackRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef(0);
   const scrollTargetRef = useRef(0);
   const mouseTargetRef = useRef(0);
@@ -2079,38 +2080,6 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
     const container = containerRef.current;
     if (!container) return undefined;
 
-    let touchStartY = 0;
-    const setVirtualScroll = (deltaY: number) => {
-      const next = Math.min(
-        Math.max(scrollRef.current + deltaY, 0),
-        heroMaxScroll,
-      );
-      scrollRef.current = next;
-      scrollTargetRef.current = next;
-    };
-
-    const handleWheel = (event: WheelEvent) => {
-      const isAtStart = scrollRef.current === 0 && event.deltaY < 0;
-      const isAtEnd = scrollRef.current === heroMaxScroll && event.deltaY > 0;
-      if (!isAtStart && !isAtEnd) {
-        event.preventDefault();
-        setVirtualScroll(event.deltaY);
-      }
-    };
-    const handleTouchStart = (event: TouchEvent) => {
-      touchStartY = event.touches[0]?.clientY ?? 0;
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      const touchY = event.touches[0]?.clientY ?? touchStartY;
-      const deltaY = touchStartY - touchY;
-      const isAtStart = scrollRef.current === 0 && deltaY < 0;
-      const isAtEnd = scrollRef.current === heroMaxScroll && deltaY > 0;
-      if (!isAtStart && !isAtEnd) {
-        event.preventDefault();
-        setVirtualScroll(deltaY);
-      }
-      touchStartY = touchY;
-    };
     const handleMouseMove = (event: MouseEvent) => {
       const rect = container.getBoundingClientRect();
       const normalizedX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -2120,22 +2089,34 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
       mouseTargetRef.current = 0;
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    container.addEventListener('touchstart', handleTouchStart, {
-      passive: false,
-    });
-    container.addEventListener('touchmove', handleTouchMove, {
-      passive: false,
-    });
     container.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
-      container.removeEventListener('wheel', handleWheel);
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  useEffect(() => {
+    const track = scrollTrackRef.current;
+    if (!track) return undefined;
+
+    const handleScroll = () => {
+      const rect = track.getBoundingClientRect();
+      let scrolled = -rect.top;
+      if (scrolled < 0) scrolled = 0;
+      if (scrolled > heroMaxScroll) scrolled = heroMaxScroll;
+      
+      scrollTargetRef.current = scrolled;
+      scrollRef.current = scrolled;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
@@ -2166,7 +2147,8 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
   const contentOpacity = Math.min(Math.max((morphValue - 0.8) / 0.2, 0), 1);
 
   return (
-    <div ref={containerRef} className="state-delivery-hero">
+    <div ref={scrollTrackRef} style={{ height: `calc(100vh + ${heroMaxScroll}px)` }}>
+      <div ref={containerRef} className="state-delivery-hero" style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
       <div
         className="state-hero-intro"
         style={
@@ -2292,6 +2274,7 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

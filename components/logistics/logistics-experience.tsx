@@ -30,7 +30,7 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,

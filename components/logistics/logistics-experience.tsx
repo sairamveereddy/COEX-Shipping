@@ -29,6 +29,7 @@ import {
 } from '@ant-design/icons';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -2030,6 +2031,7 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => { introPhaseRef.current = introPhase; }, [introPhase]);
   const scrollTrackRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const scrollRef = useRef(0);
   const scrollTargetRef = useRef(0);
   const mouseTargetRef = useRef(0);
@@ -2278,16 +2280,19 @@ function StateDeliveryHero({ metrics }: { metrics: QuoteMetrics }) {
           FedEx handoff ready.
         </Paragraph>
         <Space wrap className="state-hero-actions">
-          <Link href="/quote" passHref legacyBehavior>
-            <Button type="primary" icon={<DollarCircleOutlined />}>
-              Get quote
-            </Button>
-          </Link>
-          <Link href="/tracking" passHref legacyBehavior>
-            <Button icon={<SearchOutlined />}>
-              Track package
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            icon={<DollarCircleOutlined />}
+            onClick={() => router.push('/quote')}
+          >
+            Get quote
+          </Button>
+          <Button
+            icon={<SearchOutlined />}
+            onClick={() => router.push('/tracking')}
+          >
+            Track package
+          </Button>
         </Space>
       </div>
 
@@ -2332,6 +2337,8 @@ function ShippingFrame({
   active: PageKey;
   children: ReactNode;
 }) {
+  const router = useRouter();
+
   return (
     <ConfigProvider
       theme={{
@@ -2375,14 +2382,18 @@ function ShippingFrame({
             className="ship-menu"
             mode="horizontal"
             selectedKeys={[active]}
+            onClick={(e) => {
+              if (e.key === 'home') router.push('/');
+              else router.push(`/${e.key}`);
+            }}
             items={[
-              { key: 'home', label: <Link href="/">Overview</Link> },
-              { key: 'quote', label: <Link href="/quote">Quote</Link> },
+              { key: 'home', label: 'Overview' },
+              { key: 'quote', label: 'Quote' },
               {
                 key: 'tracking',
-                label: <Link href="/tracking">Tracking</Link>,
+                label: 'Tracking',
               },
-              { key: 'book', label: <Link href="/book">Book</Link> },
+              { key: 'book', label: 'Book' },
             ]}
           />
           <Space className="ship-header-actions" size={10}>

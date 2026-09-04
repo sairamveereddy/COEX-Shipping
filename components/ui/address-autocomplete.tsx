@@ -109,10 +109,7 @@ export function AddressAutocomplete({
       style={{ width: '100%' }}
       notFoundContent={fetching ? <Spin size="small" /> : null}
     >
-      <Input
-        placeholder={placeholder}
-        suffix={fetching ? <Spin size="small" /> : null}
-      />
+      <Input placeholder={placeholder} />
     </AutoComplete>
   );
 }

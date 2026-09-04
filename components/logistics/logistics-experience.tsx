@@ -742,38 +742,38 @@ const initialQuote: QuoteState = {
 };
 
 const initialBooking: BookingState = {
-  pickupAddress: '418 W 12th St',
-  pickupCity: 'Austin',
-  pickupState: 'TX',
-  pickupZip: '78701',
-  destinationAddress: '1 World Way',
-  destinationCity: 'Los Angeles',
-  destinationState: 'CA',
-  destinationZip: '90045',
-  contactName: 'Guest shipper',
-  contactEmail: 'shipper@example.com',
-  phone: '(862) 381-9018',
-  notes: 'Hold for destination contact if delivery desk is closed.',
+  pickupAddress: '',
+  pickupCity: '',
+  pickupState: '',
+  pickupZip: '',
+  destinationAddress: '',
+  destinationCity: '',
+  destinationState: '',
+  destinationZip: '',
+  contactName: '',
+  contactEmail: '',
+  phone: '',
+  notes: '',
 };
 
 const initialQuoteContact: QuoteContactState = {
-  shipperName: 'Guest shipper',
-  shipperEmail: 'shipper@example.com',
-  shipperPhone: '(862) 381-9018',
-  pickupStreet: '418 W 12th St',
-  pickupUnit: 'Suite 200',
-  pickupCity: 'Dallas',
-  pickupState: 'TX',
-  pickupZip: '75201',
-  recipientName: 'Destination contact',
-  recipientEmail: 'receiver@example.com',
-  recipientPhone: '(310) 555-0199',
-  deliveryStreet: '1 World Way',
-  deliveryUnit: 'Terminal delivery desk',
-  deliveryCity: 'Los Angeles',
-  deliveryState: 'CA',
-  deliveryZip: '90045',
-  deliveryInstructions: 'Call the destination contact before final delivery.',
+  shipperName: '',
+  shipperEmail: '',
+  shipperPhone: '',
+  pickupStreet: '',
+  pickupUnit: '',
+  pickupCity: '',
+  pickupState: '',
+  pickupZip: '',
+  recipientName: '',
+  recipientEmail: '',
+  recipientPhone: '',
+  deliveryStreet: '',
+  deliveryUnit: '',
+  deliveryCity: '',
+  deliveryState: '',
+  deliveryZip: '',
+  deliveryInstructions: '',
 };
 
 const itemOrder: ItemKey[] = [
@@ -2572,11 +2572,15 @@ function QuoteContactForm({
             <Row gutter={[12, 12]}>
               <Col xs={24} md={16}>
                 <Form.Item label="Street address" required>
-                  <Input
+                  <AddressAutocomplete
                     value={contact.pickupStreet}
-                    onChange={(event) =>
-                      setContactField('pickupStreet', event.target.value)
-                    }
+                    onChange={(val) => setContactField('pickupStreet', val)}
+                    onSelectAddress={(data) => {
+                      setContactField('pickupStreet', data.address);
+                      setContactField('pickupCity', data.city);
+                      setAddressState('pickup', data.state);
+                      setContactField('pickupZip', data.zip);
+                    }}
                     placeholder="Street address"
                   />
                 </Form.Item>
@@ -2669,11 +2673,15 @@ function QuoteContactForm({
               </Col>
               <Col xs={24} md={16}>
                 <Form.Item label="Street address" required>
-                  <Input
+                  <AddressAutocomplete
                     value={contact.deliveryStreet}
-                    onChange={(event) =>
-                      setContactField('deliveryStreet', event.target.value)
-                    }
+                    onChange={(val) => setContactField('deliveryStreet', val)}
+                    onSelectAddress={(data) => {
+                      setContactField('deliveryStreet', data.address);
+                      setContactField('deliveryCity', data.city);
+                      setAddressState('delivery', data.state);
+                      setContactField('deliveryZip', data.zip);
+                    }}
                     placeholder="Street address"
                   />
                 </Form.Item>

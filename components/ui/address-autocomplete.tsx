@@ -105,6 +105,7 @@ export function AddressAutocomplete({
         setInternalValue(val);
         if (onChange) onChange(val);
       }}
+      filterOption={false}
       style={{ width: '100%' }}
       notFoundContent={fetching ? <Spin size="small" /> : null}
     >

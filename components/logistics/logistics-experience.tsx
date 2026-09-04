@@ -1113,81 +1113,20 @@ const integrationCards = [
 
 const sampleShipments: Shipment[] = [
   {
-    number: 'COEX-8143-2290',
+    number: '',
     carrier: 'auto',
-    status: 'IN TRANSIT',
-    progress: 62,
-    origin: 'Dallas, TX',
-    destination: 'Los Angeles, CA',
-    mode: 'Domestic parcel / checked luggage',
-    eta: 'Sep 9',
-    pieces: '2 checked bags',
-    documents: ['Digital label', 'Carrier receipt', 'Protection certificate'],
-    exception:
-      'No active exception. Carrier handoff and delivery forecast are current.',
-    trackingLinks: [
-      {
-        carrier: 'ups',
-        label: 'Open UPS tracking',
-        url: carrierProfiles.ups.trackingUrl('1Z999AA10123456784'),
-      },
-      {
-        carrier: 'fedex',
-        label: 'Open FedEx tracking',
-        url: carrierProfiles.fedex.trackingUrl('123456789012'),
-      },
-    ],
-    milestones: [
-      { title: 'Quote reserved', detail: 'Dallas, TX - Sep 2', done: true },
-      {
-        title: 'Digital label ready',
-        detail: 'Phone-ready label created',
-        done: true,
-      },
-      { title: 'Carrier accepted', detail: 'Origin scan complete', done: true },
-      { title: 'In transit', detail: 'Line-haul to California', done: true },
-      {
-        title: 'Out for delivery',
-        detail: 'Pending destination station scan',
-        done: false,
-      },
-      { title: 'Delivered', detail: 'Pending proof of delivery', done: false },
-    ],
-  },
-  {
-    number: 'LLX-8143-2290',
-    carrier: 'ups',
-    status: 'LABEL READY',
-    progress: 34,
-    origin: 'Austin, TX',
-    destination: 'Los Angeles, CA',
-    mode: 'UPS Ground estimate / checked luggage',
-    eta: 'Sep 9',
-    pieces: '2 checked bags',
-    documents: ['Digital label', 'Carrier receipt', 'Protection certificate'],
-    trackingLinks: [
-      {
-        carrier: 'ups',
-        label: 'Open UPS tracking',
-        url: carrierProfiles.ups.trackingUrl('1Z999AA10123456784'),
-      },
-    ],
-    milestones: [
-      { title: 'Quote reserved', detail: 'Austin, TX - Sep 2', done: true },
-      {
-        title: 'Digital label ready',
-        detail: 'Phone-ready label created',
-        done: true,
-      },
-      {
-        title: 'Carrier accepted',
-        detail: 'Pending pickup or drop-off scan',
-        done: false,
-      },
-      { title: 'In transit', detail: 'Pending', done: false },
-      { title: 'Delivered', detail: 'Pending', done: false },
-    ],
-  },
+    status: 'NO SHIPMENT FOUND',
+    progress: 0,
+    origin: '',
+    destination: '',
+    mode: '',
+    eta: '',
+    pieces: '',
+    documents: [],
+    trackingLinks: [],
+    exception: '',
+    milestones: [],
+  }
 ];
 
 const faqItems = [
@@ -1662,62 +1601,26 @@ function createFallbackShipment(
   const carrier =
     selectedCarrier === 'auto' ? detectCarrier(number) : selectedCarrier;
   const links = getTrackingLinks(number, carrier);
-  const hasTrackingNumber = number.trim().length > 0;
-  const carrierName = getCarrierName(carrier);
-  const displayNumber = hasTrackingNumber
-    ? number
-    : `${carrierName.toUpperCase()} TRACKING PAGE`;
 
   return {
-    number: displayNumber || 'COEX-GUEST-2048',
+    number: number || 'NO-TRACKING',
     carrier,
-    status: hasTrackingNumber ? 'CARRIER LOOKUP READY' : 'CARRIER PAGE READY',
-    progress: hasTrackingNumber ? 18 : 8,
-    origin: hasTrackingNumber ? 'Carrier origin pending' : `${carrierName} site`,
-    destination: hasTrackingNumber
-      ? 'Carrier destination pending'
-      : 'Enter tracking number on carrier page',
-    mode: hasTrackingNumber
-      ? `${carrierName} tracking handoff`
-      : `${carrierName} public tracking page`,
-    eta: hasTrackingNumber
-      ? 'Open carrier page for live ETA'
-      : 'Enter tracking number on carrier page',
-    pieces: hasTrackingNumber ? '1 shipment' : 'Carrier page handoff',
-    documents: hasTrackingNumber
-      ? ['Digital label pending first carrier scan']
-      : ['Official carrier tracking page'],
+    status: 'SHIPMENT NOT FOUND',
+    progress: 0,
+    origin: 'Unknown',
+    destination: 'Unknown',
+    mode: 'Unrecognized Tracking Number',
+    eta: 'N/A',
+    pieces: '0',
+    documents: [],
+    exception: 'No shipment record found in database.',
     trackingLinks: links,
-    exception:
-      'Embedded UPS/FedEx scan data requires official carrier API credentials on the server. Direct carrier tracking is ready now.',
     milestones: [
       {
-        title: hasTrackingNumber
-          ? 'Tracking number received'
-          : 'Carrier page selected',
-        detail: hasTrackingNumber
-          ? 'Entered in COEX tracker'
-          : `Ready to open ${carrierName}`,
-        done: true,
-      },
-      {
-        title: `${carrierName} handoff prepared`,
-        detail: hasTrackingNumber
-          ? 'Carrier tracking link is ready'
-          : 'Carrier tracking form is ready',
-        done: links.length > 0,
-      },
-      {
-        title: 'Live carrier scan',
-        detail: 'Opens on UPS or FedEx',
+        title: 'Shipment not found',
+        detail: 'The tracking number provided does not match any record.',
         done: false,
-      },
-      {
-        title: 'Out for delivery',
-        detail: 'Carrier confirmation pending',
-        done: false,
-      },
-      { title: 'Delivered', detail: 'Carrier proof pending', done: false },
+      }
     ],
   };
 }
@@ -2942,10 +2845,15 @@ function QuotePanel({
           type="primary"
           size="large"
           block
-          href="/quote"
+          onClick={() => {
+            const number = '18623819018';
+            const items = Object.entries(quote.counts).filter(([_, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ');
+            const text = `*New Quote Request*\n\n*Lane:* ${metrics.routeLabel}\n*Items:* ${items}\n*Total Est:* $${metrics.total}`;
+            window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, '_blank');
+          }}
           icon={<ArrowRightOutlined />}
         >
-          Build full estimate
+          Send Quote via WhatsApp
         </Button>
       </Space>
     </Card>
@@ -3868,10 +3776,16 @@ export function QuotePage() {
                   type="primary"
                   block
                   disabled={metrics.packages === 0 || !quoteContactComplete}
-                  onClick={() => setSaved(true)}
+                  onClick={() => {
+                    const number = '18623819018';
+                    const items = Object.entries(quote.counts).filter(([_, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ');
+                    const text = `*New Quote Request*\n\n*Shipper:* ${quoteContact.shipperName}\n*Email:* ${quoteContact.shipperEmail}\n*Phone:* ${quoteContact.shipperPhone}\n\n*Pickup:* ${quoteContact.pickupStreet}, ${quoteContact.pickupCity}, ${quoteContact.pickupState} ${quoteContact.pickupZip}\n*Delivery:* ${quoteContact.deliveryStreet}, ${quoteContact.deliveryCity}, ${quoteContact.deliveryState} ${quoteContact.deliveryZip}\n\n*Items:* ${items}\n*Total Est:* $${metrics.total}`;
+                    window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, '_blank');
+                    setSaved(true);
+                  }}
                   icon={<FileDoneOutlined />}
                 >
-                  Save estimate
+                  Send Quote via WhatsApp
                 </Button>
                 <Button block href="/book" icon={<ArrowRightOutlined />}>
                   Continue to booking
@@ -4186,8 +4100,14 @@ export function BookPage() {
                         Continue
                       </Button>
                     ) : (
-                      <Button type="primary" onClick={() => setConfirmed(true)}>
-                        Create demo booking
+                      <Button type="primary" onClick={() => {
+                        const number = '18623819018';
+                        const items = Object.entries(quote.counts).filter(([_, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ');
+                        const text = `*New Booking*\n\n*Shipper:* ${booking.contactName} (${booking.contactEmail}, ${booking.phone})\n*Pickup:* ${booking.pickupAddress}, ${booking.pickupCity}, ${booking.pickupState} ${booking.pickupZip}\n*Delivery:* ${booking.destinationAddress}, ${booking.destinationCity}, ${booking.destinationState} ${booking.destinationZip}\n\n*Items:* ${items}\n*Total Cost:* $${metrics.total}`;
+                        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, '_blank');
+                        setConfirmed(true);
+                      }}>
+                        Confirm Booking via WhatsApp
                       </Button>
                     )}
                   </div>

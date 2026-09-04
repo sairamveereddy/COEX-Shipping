@@ -30,6 +30,7 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AddressAutocomplete } from '@/components/ui/address-autocomplete';
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -4042,16 +4043,31 @@ export function BookPage() {
                       {formFields.map(([key, label, placeholder]) => (
                         <Col xs={24} md={12} key={key}>
                           <Form.Item label={label}>
-                            <Input
-                              placeholder={placeholder}
-                              value={booking[key as keyof BookingState]}
-                              onChange={(event) =>
-                                setBookingField(
-                                  key as keyof BookingState,
-                                  event.target.value,
-                                )
-                              }
-                            />
+                            {key === 'pickupAddress' || key === 'destinationAddress' ? (
+                              <AddressAutocomplete
+                                value={booking[key as keyof BookingState]}
+                                placeholder={placeholder}
+                                onChange={(val) => setBookingField(key as keyof BookingState, val)}
+                                onSelectAddress={(data) => {
+                                  const prefix = key.replace('Address', '');
+                                  setBookingField(key as keyof BookingState, data.address);
+                                  setBookingField(`${prefix}City` as keyof BookingState, data.city);
+                                  setBookingField(`${prefix}State` as keyof BookingState, data.state);
+                                  setBookingField(`${prefix}Zip` as keyof BookingState, data.zip);
+                                }}
+                              />
+                            ) : (
+                              <Input
+                                placeholder={placeholder}
+                                value={booking[key as keyof BookingState]}
+                                onChange={(event) =>
+                                  setBookingField(
+                                    key as keyof BookingState,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            )}
                           </Form.Item>
                         </Col>
                       ))}

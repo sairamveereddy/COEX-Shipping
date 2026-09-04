@@ -92,6 +92,7 @@ type QuoteState = {
   protection: boolean;
   pickup: boolean;
   residential: boolean;
+  couponCode?: string;
   declaredValue: number;
   customerType: CustomerType;
   carrier: CarrierKey;
@@ -166,6 +167,7 @@ type CarrierRate = {
   accessorials: number;
   protection: number;
   discount: number;
+  couponDiscount?: number;
   transit: string;
   deliveryDate: string;
   trackingUrl: string;
@@ -1261,9 +1263,14 @@ function getCarrierRate(
     : 0;
   const subtotal = serviceCharge + accessorials + fuel + protection;
   const discount = quote.customerType === 'business' ? subtotal * 0.08 : 0;
-  const total = weights.packages
+  let total = weights.packages
     ? Math.round(Math.max(22, subtotal - discount))
     : 0;
+  let couponDiscount = 0;
+  if (quote.couponCode === 'NEW30') {
+    couponDiscount = Math.round(total * 0.3);
+    total -= couponDiscount;
+  }
   const deliveryDate = getDeliveryDate(
     quote.pickupDate,
     quote.speed,
@@ -1281,6 +1288,7 @@ function getCarrierRate(
     accessorials: Math.round(accessorials),
     protection,
     discount: Math.round(discount),
+    couponDiscount,
     transit: speed.transitByZone[lane.zone] ?? 'carrier confirmation required',
     deliveryDate,
     trackingUrl: profile.trackingUrl(''),
@@ -2860,6 +2868,34 @@ function QuotePanel({
   );
 }
 
+function CouponInput({ quote, setQuote }: { quote: QuoteState, setQuote: Dispatch<SetStateAction<QuoteState>> }) {
+  const applied = quote.couponCode === 'NEW30';
+
+  if (applied) {
+    return (
+      <div style={{ border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#f8fafc' }}>
+        <div>
+          <div style={{ fontWeight: 600, color: '#16a34a' }}>NEW30 Applied!</div>
+          <div style={{ fontSize: 13, color: '#64748b' }}>30% off your first shipment</div>
+        </div>
+        <Button size="small" onClick={() => setQuote(q => ({ ...q, couponCode: undefined }))}>Remove</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ flex: 1, marginRight: 12 }}>
+        <div style={{ fontWeight: 600 }}>NEW30</div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>30% off your first shipment</div>
+      </div>
+      <Button type="primary" shape="round" onClick={() => setQuote(q => ({ ...q, couponCode: 'NEW30' }))}>
+        Apply
+      </Button>
+    </div>
+  );
+}
+
 function CarrierComparison({ metrics }: { metrics: QuoteMetrics }) {
   return (
     <Row gutter={[12, 12]}>
@@ -3765,6 +3801,12 @@ export function QuotePage() {
               </div>
               <CarrierComparison metrics={metrics} />
               <Space orientation="vertical" className="full-width" size={12}>
+                <CouponInput quote={quote} setQuote={setQuote} />
+                {metrics.couponDiscount ? (
+                  <div style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600, marginTop: -8 }}>
+                    🎉 You saved ${formatMoney(metrics.couponDiscount)}!
+                  </div>
+                ) : null}
                 {!quoteContactComplete ? (
                   <Alert
                     type="warning"
@@ -4081,6 +4123,12 @@ export function BookPage() {
                     </Space>
                   ) : null}
 
+                  <CouponInput quote={quote} setQuote={setQuote} />
+                  {metrics.couponDiscount ? (
+                    <div style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600, marginBottom: 16 }}>
+                      🎉 You saved ${formatMoney(metrics.couponDiscount)}!
+                    </div>
+                  ) : null}
                   <div className="wizard-actions">
                     <Button
                       disabled={step === 0}

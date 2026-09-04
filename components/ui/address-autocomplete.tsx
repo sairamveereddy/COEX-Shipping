@@ -31,34 +31,34 @@ export function AddressAutocomplete({
   }, [value]);
 
   const fetchAddresses = async (searchText: string) => {
-    if (!searchText || searchText.length < 5) {
+    if (!searchText || searchText.length < 3) {
       setOptions([]);
       setFetching(false);
       return;
     }
 
     try {
-      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(
+      const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
         searchText
-      )}&benchmark=Public_AR_Current&format=json`;
+      )}&apiKey=a940585baf074507b51d0d482ab62823&filter=countrycode:us`;
 
       const response = await fetch(url);
       if (!response.ok) throw new Error('API error');
       
       const data = await response.json();
       
-      if (data.result && data.result.addressMatches) {
-        const newOptions = data.result.addressMatches.map((match: any) => ({
-          value: match.matchedAddress,
-          label: match.matchedAddress,
-          data: match,
+      if (data.features && data.features.length > 0) {
+        const newOptions = data.features.map((feature: any) => ({
+          value: feature.properties.formatted,
+          label: feature.properties.formatted,
+          data: feature.properties,
         }));
         setOptions(newOptions);
       } else {
         setOptions([]);
       }
     } catch (error) {
-      console.error('Census API fetch failed', error);
+      console.error('Geoapify fetch failed', error);
       setOptions([]);
     } finally {
       setFetching(false);
@@ -76,30 +76,21 @@ export function AddressAutocomplete({
     setFetching(true);
     timerRef.current = setTimeout(() => {
       fetchAddresses(searchText);
-    }, 800); // 800ms debounce since Census API is slow and we don't want to spam it
+    }, 300); // 300ms debounce for Geoapify
   };
 
   const handleSelect = (selectedValue: string, option: any) => {
     setInternalValue(selectedValue);
     if (onChange) onChange(selectedValue);
 
-    if (onSelectAddress && option.data && option.data.addressComponents) {
-      const components = option.data.addressComponents;
+    if (onSelectAddress && option.data) {
+      const props = option.data;
       
-      // Construct the street address piece by piece if possible, or fallback to the matched string
-      const streetParts = [
-        components.fromAddress || '',
-        components.preDirection || '',
-        components.streetName || '',
-        components.suffixType || '',
-        components.suffixDirection || '',
-      ].filter(Boolean).join(' ');
-
       onSelectAddress({
-        address: streetParts || selectedValue.split(',')[0],
-        city: components.city || '',
-        state: components.state || '',
-        zip: components.zip || '',
+        address: props.address_line1 || selectedValue.split(',')[0],
+        city: props.city || '',
+        state: props.state_code || props.state || '',
+        zip: props.postcode || '',
       });
     }
   };

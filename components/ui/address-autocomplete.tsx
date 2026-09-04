@@ -101,6 +101,10 @@ export function AddressAutocomplete({
       options={options}
       onSelect={handleSelect}
       onSearch={handleSearch}
+      onChange={(val) => {
+        setInternalValue(val);
+        if (onChange) onChange(val);
+      }}
       style={{ width: '100%' }}
       notFoundContent={fetching ? <Spin size="small" /> : null}
     >

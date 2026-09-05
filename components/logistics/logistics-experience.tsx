@@ -720,7 +720,7 @@ const locationByCode = Object.fromEntries(
 
 const emptyCounts: Record<ItemKey, number> = {
   carryOn: 0,
-  checked: 1,
+  checked: 0,
   oversize: 0,
   box: 0,
   golf: 0,
@@ -730,8 +730,8 @@ const emptyCounts: Record<ItemKey, number> = {
 
 const initialQuote: QuoteState = {
   counts: emptyCounts,
-  originState: 'TX',
-  destinationState: 'CA',
+  originState: '',
+  destinationState: '',
   pickupDate: '2026-09-09',
   pickupWindow: '10:00 AM - 12:00 PM',
   speed: 'standard',
@@ -1326,9 +1326,9 @@ function getDeliveryDate(pickupDate: string, speed: SpeedKey, zone: number) {
 }
 
 function getQuoteMetrics(quote: QuoteState): QuoteMetrics {
-  const origin = locationByCode[quote.originState] ?? locationByCode.TX;
+  const origin = locationByCode[quote.originState] ?? { code: '??', name: 'Origin', city: 'Origin', zip: '', lat: 39, lng: -98, region: 'NE' };
   const destination =
-    locationByCode[quote.destinationState] ?? locationByCode.CA;
+    locationByCode[quote.destinationState] ?? { code: '??', name: 'Destination', city: 'Destination', zip: '', lat: 39, lng: -98, region: 'NE' };
   const weights = getQuoteWeights(quote.counts);
   const distanceMiles = getDistanceMiles(origin, destination);
   const zone = getZone(distanceMiles);
@@ -2690,7 +2690,7 @@ function QuotePanel({
           <Col xs={24} md={12}>
             <LocationSelect
               label="Origin"
-              value={quote.originState}
+              value={quote.originState || undefined}
               onChange={(originState) =>
                 setQuote((current) => ({ ...current, originState }))
               }
@@ -2699,7 +2699,7 @@ function QuotePanel({
           <Col xs={24} md={12}>
             <LocationSelect
               label="Destination"
-              value={quote.destinationState}
+              value={quote.destinationState || undefined}
               onChange={(destinationState) =>
                 setQuote((current) => ({ ...current, destinationState }))
               }
@@ -3455,14 +3455,14 @@ export function QuotePage() {
                   <Col xs={24} md={12}>
                     <LocationSelect
                       label="Origin state location"
-                      value={quote.originState}
+                      value={quote.originState || undefined}
                       onChange={setQuoteOriginState}
                     />
                   </Col>
                   <Col xs={24} md={12}>
                     <LocationSelect
                       label="Destination state location"
-                      value={quote.destinationState}
+                      value={quote.destinationState || undefined}
                       onChange={setQuoteDestinationState}
                     />
                   </Col>
